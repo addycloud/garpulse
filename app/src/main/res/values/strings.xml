@@ -229,6 +229,13 @@
     <string name="tap_shortcut_insights">Insights screen</string>
     <string name="tap_shortcut_widgets">Widget manager</string>
     <string name="tap_shortcut_settings">Settings screen</string>
+    <string name="dev_master_switch">Developer tuning</string>
+    <string name="dev_refresh_frames">Wave duration: %1$d frames</string>
+    <string name="dev_source_layout">Overview source badge layout</string>
+    <string name="src_layout_after_title">Title on first row, badge after title</string>
+    <string name="src_layout_after_icon">Badge after icon (first row)</string>
+    <string name="src_layout_second_start">Badge on second row, left</string>
+    <string name="src_layout_second_end">Badge on second row, right</string>
     <string name="dev_section">Developer</string>
     <string name="dev_refresh_speed">Refresh wave speed: %1$.1f×</string>
     <string name="dev_refresh_speed_hint">Multiplier on the refresh-strip wave animation (1× = original 90 ms/frame, default 5×).</string>

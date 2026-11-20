@@ -106,6 +106,7 @@ import dev.easonhuang.garpulse.data.AppLanguage
 import dev.easonhuang.garpulse.data.DashboardPreferences
 import dev.easonhuang.garpulse.data.DeveloperPreferences
 import dev.easonhuang.garpulse.data.HealthConnectManager
+import dev.easonhuang.garpulse.data.SourceBadgeLayout
 import dev.easonhuang.garpulse.data.LanguagePreferences
 import dev.easonhuang.garpulse.data.Metric
 import dev.easonhuang.garpulse.data.MetricSource
@@ -217,6 +218,15 @@ fun SettingsScreen(
     val sourceState by app.metricSource.state.collectAsStateWithLifecycle(initialValue = null)
     val devSpeedCollect by app.developerPrefs.refreshAnimSpeed.collectAsStateWithLifecycle(
         initialValue = DeveloperPreferences.DEFAULT_SPEED,
+    )
+    val devFramesCollect by app.developerPrefs.refreshAnimFrames.collectAsStateWithLifecycle(
+        initialValue = DeveloperPreferences.DEFAULT_FRAMES,
+    )
+    val devEnabledCollect by app.developerPrefs.enabled.collectAsStateWithLifecycle(
+        initialValue = DeveloperPreferences.DEFAULT_ENABLED,
+    )
+    val devLayoutCollect by app.developerPrefs.sourceBadgeLayout.collectAsStateWithLifecycle(
+        initialValue = SourceBadgeLayout.AFTER_TITLE,
     )
     val hasSavedKey = sourceState?.hasKey == true
     // The key is never pre-filled into a visible field. Editing starts from blank; leaving the
@@ -598,28 +608,99 @@ fun SettingsScreen(
             item { SectionLabel(stringResource(R.string.dev_section)) }
             item {
                 SettingsCard {
-                    // Developer tuning: refresh-strip wave animation speed (1×–10×).
+                    // Master switch — when off every tunable falls back to its default.
+                    var devEnabled by remember(devEnabledCollect) { mutableStateOf(devEnabledCollect) }
+                    // Refresh wave speed (1×–10×) and duration in frames (2–12).
                     var devSpeed by remember(devSpeedCollect) { mutableStateOf(devSpeedCollect) }
+                    var devFrames by remember(devFramesCollect) { mutableStateOf(devFramesCollect) }
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                stringResource(R.string.dev_master_switch),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Switch(checked = devEnabled, onCheckedChange = {
+                                devEnabled = it
+                                scope.launch { app.developerPrefs.setEnabled(it) }
+                            })
+                        }
+                    }
+                    if (devEnabled) {
+                        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                            Text(
+                                stringResource(R.string.dev_refresh_speed, devSpeed),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Spacer(Modifier.size(8.dp))
+                            Slider(
+                                value = devSpeed,
+                                onValueChange = {
+                                    devSpeed = it
+                                    scope.launch { app.developerPrefs.setRefreshAnimSpeed(it) }
+                                },
+                                valueRange = DeveloperPreferences.MIN_SPEED..DeveloperPreferences.MAX_SPEED,
+                            )
+                            Spacer(Modifier.size(12.dp))
+                            Text(
+                                stringResource(R.string.dev_refresh_frames, devFrames),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Spacer(Modifier.size(8.dp))
+                            Slider(
+                                value = devFrames.toFloat(),
+                                onValueChange = {
+                                    devFrames = it.roundToInt()
+                                    scope.launch { app.developerPrefs.setRefreshAnimFrames(it.roundToInt()) }
+                                },
+                                valueRange = DeveloperPreferences.MIN_FRAMES.toFloat()..DeveloperPreferences.MAX_FRAMES.toFloat(),
+                                steps = DeveloperPreferences.MAX_FRAMES - DeveloperPreferences.MIN_FRAMES - 1,
+                            )
+                            Text(
+                                stringResource(R.string.dev_refresh_speed_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+            item {
+                SettingsCard {
+                    // Source badge placement on Overview metric cards (title row placement etc.).
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
                         Text(
-                            stringResource(R.string.dev_refresh_speed, devSpeed),
+                            stringResource(R.string.dev_source_layout),
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Medium,
                         )
                         Spacer(Modifier.size(8.dp))
-                        Slider(
-                            value = devSpeed,
-                            onValueChange = {
-                                devSpeed = it
-                                scope.launch { app.developerPrefs.setRefreshAnimSpeed(it) }
-                            },
-                            valueRange = DeveloperPreferences.MIN_SPEED..DeveloperPreferences.MAX_SPEED,
-                        )
-                        Text(
-                            stringResource(R.string.dev_refresh_speed_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        SourceBadgeLayout.entries.forEach { option ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(MaterialTheme.shapes.medium)
+                                    .selectable(
+                                        selected = option == devLayoutCollect,
+                                        role = Role.RadioButton,
+                                        onClick = {
+                                            scope.launch { app.developerPrefs.setSourceBadgeLayout(option) }
+                                        },
+                                    )
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(selected = option == devLayoutCollect, onClick = null)
+                                Spacer(Modifier.size(12.dp))
+                                Text(stringResource(option.labelRes), style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
                     }
                 }
             }

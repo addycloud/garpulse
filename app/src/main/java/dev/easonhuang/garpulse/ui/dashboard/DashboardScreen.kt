@@ -57,6 +57,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.easonhuang.garpulse.GarPulseApp
 import dev.easonhuang.garpulse.R
 import dev.easonhuang.garpulse.data.DashboardLayout
+import dev.easonhuang.garpulse.data.SourceBadgeLayout
 import dev.easonhuang.garpulse.data.DashboardPreferences
 import dev.easonhuang.garpulse.data.UnitPreferences
 import dev.easonhuang.garpulse.data.HealthConnectManager
@@ -91,6 +92,9 @@ fun DashboardScreen(
     // Health-Connect-only view stays visually calm.
     val showSourceBadges = sourceState?.source == MetricSource.AUTO ||
         sourceState?.source == MetricSource.GARMIN_API
+    val sourceBadgeLayout by app.developerPrefs.sourceBadgeLayout.collectAsStateWithLifecycle(
+        initialValue = SourceBadgeLayout.AFTER_TITLE,
+    )
     val vm: DashboardViewModel = viewModel(
         factory = DashboardViewModel.factory(manager, dashboardPrefs, units, app.metricSource),
     )
@@ -147,7 +151,7 @@ fun DashboardScreen(
             val all = allSummaries
             val stored = layout
             if (all != null && stored != null) {
-                EditGrid(all, stored, contentPadding, showSource = showSourceBadges, onSave = vm::saveLayout)
+                EditGrid(all, stored, contentPadding, showSource = showSourceBadges, sourceLayout = sourceBadgeLayout, onSave = vm::saveLayout)
             }
             return@Scaffold
         }
@@ -170,6 +174,7 @@ fun DashboardScreen(
                     },
                     onLongClick = startEditing,
                     showSource = showSourceBadges,
+                    sourceLayout = sourceBadgeLayout,
                 )
             }
         }
@@ -182,6 +187,7 @@ private fun EditGrid(
     stored: DashboardLayout,
     contentPadding: PaddingValues,
     showSource: Boolean,
+    sourceLayout: SourceBadgeLayout,
     onSave: (order: List<Metric>, hidden: Set<Metric>) -> Unit,
 ) {
     // Local working copy, seeded once when edit mode opens. Edits write straight through to
@@ -243,6 +249,7 @@ private fun EditGrid(
                     summary = all[metric] ?: MetricSummary(metric, "-", null, hasData = false, granted = true),
                     hidden = false,
                     showSource = showSource,
+                    sourceLayout = sourceLayout,
                     onToggle = { hide(metric) },
                     onMoveEarlier = { move(metric, -1) },
                     onMoveLater = { move(metric, 1) },
@@ -270,6 +277,7 @@ private fun EditGrid(
                     summary = all[metric] ?: MetricSummary(metric, "-", null, hasData = false, granted = true),
                     hidden = true,
                     showSource = showSource,
+                    sourceLayout = sourceLayout,
                     onToggle = { show(metric) },
                 )
             }
@@ -287,6 +295,7 @@ private fun EditableCard(
     summary: MetricSummary,
     hidden: Boolean,
     showSource: Boolean,
+    sourceLayout: SourceBadgeLayout,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
     onMoveEarlier: (() -> Unit)? = null,
@@ -311,6 +320,7 @@ private fun EditableCard(
             summary = summary,
             onClick = if (hidden) onToggle else ({}),
             showSource = showSource,
+            sourceLayout = sourceLayout,
             modifier = Modifier
                 .fillMaxWidth()
                 .graphicsLayer { alpha = if (hidden) 0.55f else 1f }

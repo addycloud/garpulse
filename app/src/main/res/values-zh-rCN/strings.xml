@@ -217,6 +217,13 @@
     <string name="tap_shortcut_insights">总览页</string>
     <string name="tap_shortcut_widgets">小组件管理</string>
     <string name="tap_shortcut_settings">设置页</string>
+    <string name="dev_master_switch">开发者调节</string>
+    <string name="dev_refresh_frames">波浪时长：%1$d 帧</string>
+    <string name="dev_source_layout">概览来源标签位置</string>
+    <string name="src_layout_after_title">标题在首行图标后，来源跟标题后</string>
+    <string name="src_layout_after_icon">来源在首行图标后</string>
+    <string name="src_layout_second_start">来源在第二行居左</string>
+    <string name="src_layout_second_end">来源在第二行居右</string>
     <string name="dev_section">开发者</string>
     <string name="dev_refresh_speed">刷新波浪动效速度：%1$.1f×</string>
     <string name="dev_refresh_speed_hint">刷新条波浪动画速度倍率（1× 为原始 90 毫秒/帧，默认 5×）。</string>

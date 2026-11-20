@@ -79,8 +79,11 @@ class SummaryViewModel(
 
     private suspend fun load(system: UnitSystem) {
         val granted = runCatching { manager.grantedPermissions() }.getOrDefault(emptySet())
+        // Garmin-only metrics have no Health Connect record type — permissionFor() would throw
+        // for them — so they bypass the permission filter and are simply supplied (or left
+        // empty) by readDailySeries depending on the active source.
         val byMetric = Metric.entries
-            .filter { manager.permissionFor(it) in granted }
+            .filter { it.garminOnly || runCatching { manager.permissionFor(it) }.getOrNull() in granted }
             .associateWith { runCatching { manager.readDailySeries(it, 14, system) }.getOrDefault(emptyList()) }
         sourceCache = Metric.entries.associateWith { metric ->
             runCatching { manager.sourceFor(metric, system) }.getOrDefault(ValueSource.HEALTH_CONNECT)

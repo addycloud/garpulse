@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.easonhuang.garpulse.R
 import dev.easonhuang.garpulse.data.ValueSource
+import dev.easonhuang.garpulse.data.SourceBadgeLayout
 import dev.easonhuang.garpulse.data.MetricSummary
 import dev.easonhuang.garpulse.data.title
 import dev.easonhuang.garpulse.data.unit
@@ -47,14 +48,15 @@ fun MetricCard(
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
     showSource: Boolean = false,
+    sourceLayout: SourceBadgeLayout = SourceBadgeLayout.AFTER_TITLE,
 ) {
     val accent = summary.metric.accent
     val locked = !summary.granted
     val shape = MaterialTheme.shapes.extraLarge
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        // On very narrow columns (5+ per row) the badge text would clip; switch to the
-        // colour-dot-only form, which stays fully visible and carries the same meaning.
-        val compact = maxWidth < 150.dp
+        // Only extremely narrow columns (< ~3.5 per row on a phone) still clip the badge text;
+        // there the colour-dot-only form keeps the meaning while never clipping.
+        val compact = maxWidth < 110.dp
         Card(
             modifier = modifier
                 .height(168.dp)
@@ -81,19 +83,46 @@ fun MetricCard(
                             modifier = Modifier.size(20.dp),
                         )
                     }
-                    Spacer(Modifier.weight(1f))
-                    if (showSource) {
-                        SourceBadge(source = summary.source, compact = compact)
+                    if (sourceLayout == SourceBadgeLayout.AFTER_TITLE) {
+                        Spacer(Modifier.size(8.dp))
+                        // Title lives on the header row, after the icon; the badge follows it.
+                        Text(
+                            text = summary.metric.title,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (showSource) SourceBadge(summary.source, compact)
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                        if (showSource && sourceLayout == SourceBadgeLayout.AFTER_ICON) {
+                            SourceBadge(summary.source, compact)
+                        }
                     }
                 }
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = summary.metric.title,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                )
-                Spacer(Modifier.height(2.dp))
+                if (sourceLayout != SourceBadgeLayout.AFTER_TITLE) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (showSource && sourceLayout == SourceBadgeLayout.SECOND_START) {
+                            SourceBadge(summary.source, compact)
+                            Spacer(Modifier.size(8.dp))
+                        }
+                        Text(
+                            text = summary.metric.title,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (showSource && sourceLayout == SourceBadgeLayout.SECOND_END) {
+                            Spacer(Modifier.size(8.dp))
+                            SourceBadge(summary.source, compact)
+                        }
+                    }
+                } else {
+                    Spacer(Modifier.height(2.dp))
+                }
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         text = if (locked) stringResource(R.string.card_locked) else summary.value,

@@ -52,13 +52,17 @@ internal object WidgetRefreshStrip {
         }
         val widget = provider?.let { WidgetCatalog.widgetFor(it) }
 
-        // Speed multiplier from the developer settings; 1× = the original gentle wave.
-        val speed = DeveloperPreferences(app).refreshAnimSpeed.first()
+        // Developer tuning, gated by the master switch: speed multiplier (1× = the original
+        // gentle wave) and frame count (the wave's total duration is frames × per-frame delay).
+        val dev = DeveloperPreferences(app)
+        val devEnabled = dev.enabled.first()
+        val speed = if (devEnabled) dev.refreshAnimSpeed.first() else DeveloperPreferences.DEFAULT_SPEED
+        val frames = if (devEnabled) dev.refreshAnimFrames.first() else DeveloperPreferences.DEFAULT_FRAMES
         val delayMs = (BASE_FRAME_DELAY_MS / speed).toLong().coerceAtLeast(8L)
 
         setFrame(app, glanceId, 0)
         widget?.update(app, glanceId)
-        repeat(FRAME_COUNT) { frame ->
+        repeat(frames) { frame ->
             delay(delayMs)
             setFrame(app, glanceId, frame + 1)
             widget?.update(app, glanceId)
