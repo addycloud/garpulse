@@ -19,11 +19,11 @@ fun signingValue(prop: String, env: String): String? =
 val hasSigning = signingValue("storeFile", "HEARTWOOD_STORE_FILE") != null
 
 android {
-    namespace = "dev.easonhuang.heartwood"
+    namespace = "dev.easonhuang.garpulse"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "dev.easonhuang.heartwood"
+        applicationId = "dev.easonhuang.garpulse"
         minSdk = 28
         targetSdk = 36
         versionCode = 2

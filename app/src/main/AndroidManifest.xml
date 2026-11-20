@@ -3,7 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- WorkManager (used only for the periodic widget-refresh worker) pulls in
-         ACCESS_NETWORK_STATE to support network-constrained jobs. Heartwood never sets a
+         ACCESS_NETWORK_STATE to support network-constrained jobs. GarPulse never sets a
          network constraint and does no networking at all, so strip the permission to keep
          the "nothing leaves your device" promise honest. See issue #1. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
@@ -58,19 +58,19 @@
     </queries>
 
     <application
-        android:name=".HeartwoodApp"
+        android:name=".GarPulseApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Heartwood">
+        android:theme="@style/Theme.GarPulse">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:theme="@style/Theme.Heartwood.Splash">
+            android:theme="@style/Theme.GarPulse.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -95,7 +95,7 @@
 
         <!-- Full dashboard widget -->
         <receiver
-            android:name=".widget.HeartwoodWidgetReceiver"
+            android:name=".widget.GarPulseWidgetReceiver"
             android:exported="true"
             android:label="@string/widget_dashboard_name">
             <intent-filter>
@@ -257,7 +257,7 @@
 
         <!-- Quick Settings tiles (shade controls, like Wi-Fi / Bluetooth) -->
         <service
-            android:name=".tile.HeartwoodTileService"
+            android:name=".tile.GarPulseTileService"
             android:exported="true"
             android:icon="@mipmap/ic_launcher"
             android:label="@string/quick_tile_name"
@@ -288,7 +288,7 @@
             android:name=".widget.MetricWidgetConfigActivity"
             android:exported="true"
             android:label="@string/widget_metric_name"
-            android:theme="@style/Theme.Heartwood">
+            android:theme="@style/Theme.GarPulse">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
             </intent-filter>

@@ -1,0 +1,272 @@
+package dev.easonhuang.garpulse.ui.summary
+
+import android.text.format.DateFormat
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.TrendingDown
+import androidx.compose.material.icons.automirrored.rounded.TrendingFlat
+import androidx.compose.material.icons.automirrored.rounded.TrendingUp
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.background
+import dev.easonhuang.garpulse.R
+import dev.easonhuang.garpulse.data.GoalsRepository
+import dev.easonhuang.garpulse.data.HealthConnectManager
+import dev.easonhuang.garpulse.data.WeeklyStat
+import dev.easonhuang.garpulse.data.UnitPreferences
+import dev.easonhuang.garpulse.data.formatValue
+import dev.easonhuang.garpulse.data.title
+import dev.easonhuang.garpulse.data.unit
+import dev.easonhuang.garpulse.ui.components.BarChart
+import dev.easonhuang.garpulse.ui.components.GoalRing
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+import kotlin.math.roundToInt
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SummaryScreen(
+    manager: HealthConnectManager,
+    goalsRepo: GoalsRepository,
+    units: UnitPreferences,
+    bottomInset: androidx.compose.ui.unit.Dp,
+) {
+    val vm: SummaryViewModel = viewModel(factory = SummaryViewModel.factory(manager, goalsRepo, units))
+    val state by vm.state.collectAsStateWithLifecycle()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    var editing by remember { mutableStateOf<WeeklyStat?>(null) }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+        topBar = {
+            LargeTopAppBar(
+                title = { Text(stringResource(R.string.summary_title)) },
+                scrollBehavior = scrollBehavior,
+            )
+        },
+    ) { inner ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                top = inner.calculateTopPadding(),
+                bottom = bottomInset + 24.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            item {
+                Text(
+                    stringResource(R.string.summary_subtitle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                )
+            }
+            if (!state.loading && state.stats.isEmpty()) {
+                item { EmptyState() }
+            }
+            items(state.stats, key = { it.metric.key }) { stat ->
+                WeeklyCard(stat, onEdit = { editing = stat })
+            }
+        }
+    }
+
+    editing?.let { stat ->
+        GoalEditDialog(
+            stat = stat,
+            onDismiss = { editing = null },
+            onSave = { value -> vm.setGoal(stat.metric, value, stat.system); editing = null },
+        )
+    }
+}
+
+@Composable
+private fun WeeklyCard(stat: WeeklyStat, onEdit: () -> Unit) {
+    val accent = stat.metric.accent
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                GoalRing(progress = stat.progress, color = accent) {
+                    Text(
+                        "${(stat.progress * 100).roundToInt()}%",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Spacer(Modifier.size(16.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(stat.metric.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        stringResource(
+                            R.string.summary_progress,
+                            stat.metric.formatValue(stat.thisWeekAvg, stat.system),
+                            stat.metric.formatValue(stat.goal, stat.system),
+                            stat.metric.unit(stat.system),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    DeltaChip(stat)
+                }
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.summary_edit_goal), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            val days = stat.perDay.size
+            val daysMet = stat.perDay.count { it.value >= stat.goal }
+            val chartDescription = if (stat.goal > 0f) {
+                pluralStringResource(R.plurals.summary_chart_goal_met, days, stat.metric.title, daysMet, days)
+            } else {
+                pluralStringResource(R.plurals.summary_chart_description, days, stat.metric.title, days)
+            }
+            // Tapping a bar shows that day's exact value and how it compares with the goal.
+            var selected by rememberSaveable(stat.metric) { mutableStateOf<Int?>(null) }
+            val dayFormat = remember { dayFormatter() }
+            val dayTexts = stat.perDay.map { p ->
+                stringResource(R.string.summary_bar_value, dayFormat.format(p.time.atZone(ZoneId.systemDefault())),
+                    stringResource(R.string.value_with_unit, stat.metric.formatValue(p.value, stat.system), stat.metric.unit(stat.system))) to
+                    goalText(stat, p.value)
+            }
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(96.dp)
+                    .semantics { contentDescription = chartDescription },
+            ) {
+                BarChart(
+                    stat.perDay, accent, Modifier.fillMaxSize(), goal = stat.goal,
+                    selected = selected,
+                    onSelect = { selected = it },
+                    barDescription = { i -> dayTexts[i].toList().filterNotNull().joinToString(", ") },
+                )
+            }
+            selected?.takeIf { it in dayTexts.indices }?.let { i ->
+                val (value, goal) = dayTexts[i]
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        value,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (goal != null) {
+                        val met = stat.perDay[i].value >= stat.goal
+                        Text(
+                            goal,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (met) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** "Goal met" or how far a day fell short, or null when no goal is set. */
+@Composable
+private fun goalText(stat: WeeklyStat, value: Float): String? = when {
+    stat.goal <= 0f -> null
+    value >= stat.goal -> stringResource(R.string.summary_bar_goal_met)
+    else -> stringResource(
+        R.string.summary_bar_below_goal,
+        stringResource(R.string.value_with_unit, stat.metric.formatValue(stat.goal - value, stat.system), stat.metric.unit(stat.system)),
+    )
+}
+
+/** Weekday + date in the locale's own order, e.g. "Wed, Oct 14". */
+private fun dayFormatter(): DateTimeFormatter {
+    val locale = Locale.getDefault()
+    return DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, "EEEMMMd"), locale)
+}
+
+@Composable
+private fun DeltaChip(stat: WeeklyStat) {
+    val delta = stat.deltaPercent
+    val (icon, tint, label) = when {
+        delta == null -> Triple(Icons.AutoMirrored.Rounded.TrendingFlat, MaterialTheme.colorScheme.onSurfaceVariant, stringResource(R.string.trend_new))
+        delta >= 1f -> Triple(Icons.AutoMirrored.Rounded.TrendingUp, stat.metric.accent, stringResource(R.string.trend_up, delta.roundToInt()))
+        delta <= -1f -> Triple(Icons.AutoMirrored.Rounded.TrendingDown, MaterialTheme.colorScheme.error, stringResource(R.string.trend_down, delta.roundToInt()))
+        else -> Triple(Icons.AutoMirrored.Rounded.TrendingFlat, MaterialTheme.colorScheme.onSurfaceVariant, stringResource(R.string.trend_steady))
+    }
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(50))
+            .background(tint.copy(alpha = 0.14f))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.size(4.dp))
+        Text(label, style = MaterialTheme.typography.labelMedium, color = tint)
+    }
+}
+
+@Composable
+private fun EmptyState() {
+    Column(
+        Modifier.fillMaxWidth().padding(40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            stringResource(R.string.summary_empty_title),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            stringResource(R.string.summary_empty_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+    }
+}
