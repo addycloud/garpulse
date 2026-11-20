@@ -41,6 +41,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.HealthAndSafety
 import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Lock
@@ -107,6 +108,7 @@ import dev.easonhuang.garpulse.data.DashboardPreferences
 import dev.easonhuang.garpulse.data.DeveloperPreferences
 import dev.easonhuang.garpulse.data.HealthConnectManager
 import dev.easonhuang.garpulse.data.SourceBadgeLayout
+import dev.easonhuang.garpulse.data.SourceBadgeStyle
 import dev.easonhuang.garpulse.data.LanguagePreferences
 import dev.easonhuang.garpulse.data.Metric
 import dev.easonhuang.garpulse.data.MetricSource
@@ -228,6 +230,10 @@ fun SettingsScreen(
     val devLayoutCollect by app.developerPrefs.sourceBadgeLayout.collectAsStateWithLifecycle(
         initialValue = SourceBadgeLayout.AFTER_TITLE,
     )
+    val devStyleCollect by app.developerPrefs.sourceBadgeStyle.collectAsStateWithLifecycle(
+        initialValue = SourceBadgeStyle.TEXT,
+    )
+    val sparkBehindCollect by dashboardPrefs.sparkBehind.collectAsStateWithLifecycle(initialValue = false)
     val hasSavedKey = sourceState?.hasKey == true
     // The key is never pre-filled into a visible field. Editing starts from blank; leaving the
     // field blank on save means "keep the current key", so its value is never echoed in the UI.
@@ -543,6 +549,39 @@ fun SettingsScreen(
                         onClick = { showColumnsDialog = true },
                     )
                     SettingsDivider()
+                    // Trend chart placement: its own slot below the value, or a backdrop behind
+                    // the whole card content.
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Rounded.Insights,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Spacer(Modifier.size(16.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                stringResource(R.string.settings_overview_spark),
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                            Text(
+                                stringResource(
+                                    if (sparkBehindCollect) R.string.settings_overview_spark_behind
+                                    else R.string.settings_overview_spark_separated,
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = sparkBehindCollect,
+                            onCheckedChange = { scope.launch { dashboardPrefs.saveSparkBehind(it) } },
+                        )
+                    }
+                    SettingsDivider()
                     SettingRow(
                         icon = Icons.Rounded.Straighten,
                         title = stringResource(R.string.settings_units),
@@ -697,6 +736,39 @@ fun SettingsScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 RadioButton(selected = option == devLayoutCollect, onClick = null)
+                                Spacer(Modifier.size(12.dp))
+                                Text(stringResource(option.labelRes), style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                        Spacer(Modifier.size(8.dp))
+                        Text(
+                            stringResource(R.string.dev_source_style),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Spacer(Modifier.size(4.dp))
+                        Text(
+                            stringResource(R.string.dev_source_style_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.size(8.dp))
+                        SourceBadgeStyle.entries.forEach { option ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(MaterialTheme.shapes.medium)
+                                    .selectable(
+                                        selected = option == devStyleCollect,
+                                        role = Role.RadioButton,
+                                        onClick = {
+                                            scope.launch { app.developerPrefs.setSourceBadgeStyle(option) }
+                                        },
+                                    )
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(selected = option == devStyleCollect, onClick = null)
                                 Spacer(Modifier.size(12.dp))
                                 Text(stringResource(option.labelRes), style = MaterialTheme.typography.bodyMedium)
                             }

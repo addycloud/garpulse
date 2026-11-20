@@ -21,6 +21,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 data class SummaryState(
     val loading: Boolean = true,
@@ -52,14 +55,17 @@ class SummaryViewModel(
             // screen mirrors the Overview's full set.
             val stats = Metric.entries.map { metric ->
                 val pts = loaded.byMetric[metric]
-                val thisWeek = pts.orEmpty().takeLast(7)
+                val weekRaw = pts.orEmpty().takeLast(7)
                 val lastWeek = pts.orEmpty().dropLast(7).takeLast(7)
                 // Goals are stored metric; show them in the same units as the series.
                 val goalBase = goals[metric] ?: GoalCatalog.defaults[metric] ?: 0f
                 WeeklyStat(
                     metric = metric,
-                    perDay = thisWeek,
-                    thisWeekAvg = if (thisWeek.isEmpty()) 0f else thisWeek.map { it.value }.average().toFloat(),
+                    // Pad sparse series (e.g. latest-style readings recorded on only a few days)
+                    // to a full 7-day window so every card renders the same slim-bar chart as the
+                    // daily-total metrics instead of a few oversized pills.
+                    perDay = padWeek(weekRaw),
+                    thisWeekAvg = if (weekRaw.isEmpty()) 0f else weekRaw.map { it.value }.average().toFloat(),
                     lastWeekAvg = if (lastWeek.isEmpty()) 0f else lastWeek.map { it.value }.average().toFloat(),
                     goal = metric.fromBase(goalBase, system),
                     system = system,
@@ -99,5 +105,26 @@ class SummaryViewModel(
     companion object {
         fun factory(manager: HealthConnectManager, goalsRepo: GoalsRepository, units: UnitPreferences) =
             viewModelFactory { initializer { SummaryViewModel(manager, goalsRepo, units) } }
+
+        /**
+         * Expands a partial week to exactly 7 daily points ending on the last recorded day.
+         * Missing days become zero-height bars with their weekday label, so sparse metrics
+         * (heart rate, HRV, …) chart exactly like the daily-total ones above them.
+         */
+        private fun padWeek(pts: List<SeriesPoint>): List<SeriesPoint> {
+            if (pts.isEmpty()) return pts
+            val zone = ZoneId.systemDefault()
+            val lastDate = pts.last().time.atZone(zone).toLocalDate()
+            val byDate = pts.associateBy { it.time.atZone(zone).toLocalDate() }
+            val dowFmt = DateTimeFormatter.ofPattern("EEE", Locale.getDefault())
+            return (6 downTo 0).map { back ->
+                val date = lastDate.minusDays(back.toLong())
+                byDate[date] ?: SeriesPoint(
+                    date.atStartOfDay(zone).toInstant(),
+                    0f,
+                    dowFmt.format(date),
+                )
+            }
+        }
     }
 }

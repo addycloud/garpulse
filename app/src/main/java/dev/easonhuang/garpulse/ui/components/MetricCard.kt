@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -36,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import dev.easonhuang.garpulse.R
 import dev.easonhuang.garpulse.data.ValueSource
 import dev.easonhuang.garpulse.data.SourceBadgeLayout
+import dev.easonhuang.garpulse.data.SourceBadgeStyle
 import dev.easonhuang.garpulse.data.MetricSummary
 import dev.easonhuang.garpulse.data.title
 import dev.easonhuang.garpulse.data.unit
@@ -49,10 +51,13 @@ fun MetricCard(
     onLongClick: (() -> Unit)? = null,
     showSource: Boolean = false,
     sourceLayout: SourceBadgeLayout = SourceBadgeLayout.AFTER_TITLE,
+    sourceStyle: SourceBadgeStyle = SourceBadgeStyle.TEXT,
+    sparkBehind: Boolean = false,
 ) {
     val accent = summary.metric.accent
     val locked = !summary.granted
     val shape = MaterialTheme.shapes.extraLarge
+    val hasSpark = !locked && summary.spark.size > 1
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         // Only extremely narrow columns (< ~3.5 per row on a phone) still clip the badge text;
         // there the colour-dot-only form keeps the meaning while never clipping.
@@ -67,7 +72,19 @@ fun MetricCard(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             ),
         ) {
-            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Box(Modifier.fillMaxWidth()) {
+                if (sparkBehind && hasSpark) {
+                    // Backdrop mode: the trend fills the whole card behind the text, softened
+                    // so headline values keep their contrast (WCAG AA needs 4.5:1).
+                    Sparkline(
+                        summary.spark,
+                        accent,
+                        Modifier
+                            .matchParentSize()
+                            .alpha(0.35f),
+                    )
+                }
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         Modifier
@@ -93,11 +110,11 @@ fun MetricCard(
                             maxLines = 1,
                             modifier = Modifier.weight(1f),
                         )
-                        if (showSource) SourceBadge(summary.source, compact)
+                        if (showSource) SourceBadge(summary.source, compact, sourceStyle)
                     } else {
                         Spacer(Modifier.weight(1f))
                         if (showSource && sourceLayout == SourceBadgeLayout.AFTER_ICON) {
-                            SourceBadge(summary.source, compact)
+                            SourceBadge(summary.source, compact, sourceStyle)
                         }
                     }
                 }
@@ -105,7 +122,7 @@ fun MetricCard(
                     Spacer(Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (showSource && sourceLayout == SourceBadgeLayout.SECOND_START) {
-                            SourceBadge(summary.source, compact)
+                            SourceBadge(summary.source, compact, sourceStyle)
                             Spacer(Modifier.size(8.dp))
                         }
                         Text(
@@ -117,7 +134,7 @@ fun MetricCard(
                         )
                         if (showSource && sourceLayout == SourceBadgeLayout.SECOND_END) {
                             Spacer(Modifier.size(8.dp))
-                            SourceBadge(summary.source, compact)
+                            SourceBadge(summary.source, compact, sourceStyle)
                         }
                     }
                 } else {
@@ -141,7 +158,7 @@ fun MetricCard(
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                if (!locked && summary.spark.size > 1) {
+                if (hasSpark && !sparkBehind) {
                     Sparkline(summary.spark, accent, Modifier.fillMaxWidth().height(28.dp))
                 } else {
                     Text(
@@ -150,6 +167,7 @@ fun MetricCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                     )
+                }
                 }
             }
         }
@@ -163,10 +181,11 @@ fun MetricCard(
  * and the dot never clips.
  */
 @Composable
-private fun SourceBadge(source: ValueSource, compact: Boolean = false) {
+private fun SourceBadge(source: ValueSource, compact: Boolean = false, style: SourceBadgeStyle = SourceBadgeStyle.TEXT) {
+    if (style == SourceBadgeStyle.HIDDEN) return
     val tint = source.badgeColor
     val label = stringResource(source.shortRes)
-    if (compact) {
+    if (compact || style == SourceBadgeStyle.DOT) {
         Box(
             Modifier
                 .size(12.dp)

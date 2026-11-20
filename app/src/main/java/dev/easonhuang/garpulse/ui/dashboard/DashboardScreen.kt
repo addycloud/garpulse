@@ -57,7 +57,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.easonhuang.garpulse.GarPulseApp
 import dev.easonhuang.garpulse.R
 import dev.easonhuang.garpulse.data.DashboardLayout
+import dev.easonhuang.garpulse.data.DeveloperPreferences
 import dev.easonhuang.garpulse.data.SourceBadgeLayout
+import dev.easonhuang.garpulse.data.SourceBadgeStyle
 import dev.easonhuang.garpulse.data.DashboardPreferences
 import dev.easonhuang.garpulse.data.UnitPreferences
 import dev.easonhuang.garpulse.data.HealthConnectManager
@@ -95,6 +97,17 @@ fun DashboardScreen(
     val sourceBadgeLayout by app.developerPrefs.sourceBadgeLayout.collectAsStateWithLifecycle(
         initialValue = SourceBadgeLayout.AFTER_TITLE,
     )
+    val devEnabled by app.developerPrefs.enabled.collectAsStateWithLifecycle(
+        initialValue = DeveloperPreferences.DEFAULT_ENABLED,
+    )
+    val sourceBadgeStyle by app.developerPrefs.sourceBadgeStyle.collectAsStateWithLifecycle(
+        initialValue = SourceBadgeStyle.TEXT,
+    )
+    val sparkBehind by dashboardPrefs.sparkBehind.collectAsStateWithLifecycle(initialValue = false)
+    // With developer tuning on, the badge style fully controls visibility (including forcing
+    // badges in Health-Connect-only mode for A/B comparison); otherwise the auto rule applies.
+    val effectiveShowSource = if (devEnabled) sourceBadgeStyle != SourceBadgeStyle.HIDDEN else showSourceBadges
+    val effectiveSourceStyle = if (devEnabled) sourceBadgeStyle else SourceBadgeStyle.TEXT
     val vm: DashboardViewModel = viewModel(
         factory = DashboardViewModel.factory(manager, dashboardPrefs, units, app.metricSource),
     )
@@ -151,7 +164,7 @@ fun DashboardScreen(
             val all = allSummaries
             val stored = layout
             if (all != null && stored != null) {
-                EditGrid(all, stored, contentPadding, showSource = showSourceBadges, sourceLayout = sourceBadgeLayout, onSave = vm::saveLayout)
+                EditGrid(all, stored, contentPadding, showSource = effectiveShowSource, sourceLayout = sourceBadgeLayout, sourceStyle = effectiveSourceStyle, sparkBehind = sparkBehind, onSave = vm::saveLayout)
             }
             return@Scaffold
         }
@@ -173,8 +186,10 @@ fun DashboardScreen(
                         if (summary.granted) onOpenMetric(summary.metric) else onManagePermissions()
                     },
                     onLongClick = startEditing,
-                    showSource = showSourceBadges,
+                    showSource = effectiveShowSource,
                     sourceLayout = sourceBadgeLayout,
+                    sourceStyle = effectiveSourceStyle,
+                    sparkBehind = sparkBehind,
                 )
             }
         }
@@ -188,6 +203,8 @@ private fun EditGrid(
     contentPadding: PaddingValues,
     showSource: Boolean,
     sourceLayout: SourceBadgeLayout,
+    sourceStyle: SourceBadgeStyle,
+    sparkBehind: Boolean,
     onSave: (order: List<Metric>, hidden: Set<Metric>) -> Unit,
 ) {
     // Local working copy, seeded once when edit mode opens. Edits write straight through to
@@ -250,6 +267,8 @@ private fun EditGrid(
                     hidden = false,
                     showSource = showSource,
                     sourceLayout = sourceLayout,
+                    sourceStyle = sourceStyle,
+                    sparkBehind = sparkBehind,
                     onToggle = { hide(metric) },
                     onMoveEarlier = { move(metric, -1) },
                     onMoveLater = { move(metric, 1) },
@@ -278,6 +297,8 @@ private fun EditGrid(
                     hidden = true,
                     showSource = showSource,
                     sourceLayout = sourceLayout,
+                    sourceStyle = sourceStyle,
+                    sparkBehind = sparkBehind,
                     onToggle = { show(metric) },
                 )
             }
@@ -296,6 +317,8 @@ private fun EditableCard(
     hidden: Boolean,
     showSource: Boolean,
     sourceLayout: SourceBadgeLayout,
+    sourceStyle: SourceBadgeStyle,
+    sparkBehind: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
     onMoveEarlier: (() -> Unit)? = null,
@@ -321,6 +344,8 @@ private fun EditableCard(
             onClick = if (hidden) onToggle else ({}),
             showSource = showSource,
             sourceLayout = sourceLayout,
+            sourceStyle = sourceStyle,
+            sparkBehind = sparkBehind,
             modifier = Modifier
                 .fillMaxWidth()
                 .graphicsLayer { alpha = if (hidden) 0.55f else 1f }

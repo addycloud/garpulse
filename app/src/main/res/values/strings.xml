@@ -232,6 +232,14 @@
     <string name="dev_master_switch">Developer tuning</string>
     <string name="dev_refresh_frames">Wave duration: %1$d frames</string>
     <string name="dev_source_layout">Overview source badge layout</string>
+    <string name="dev_source_style">Overview source badge style</string>
+    <string name="dev_source_style_hint">How the badge is drawn. With developer tuning on, “Hidden” hides badges everywhere and the other styles also force badges to show in Health-Connect-only mode, so you can compare combinations.</string>
+    <string name="src_style_text">Colour dot + text</string>
+    <string name="src_style_dot">Colour dot only</string>
+    <string name="src_style_hidden">Hidden</string>
+    <string name="settings_overview_spark">Overview trend chart placement</string>
+    <string name="settings_overview_spark_separated">Chart in its own slot below the value</string>
+    <string name="settings_overview_spark_behind">Chart drawn behind the title and value</string>
     <string name="src_layout_after_title">Title on first row, badge after title</string>
     <string name="src_layout_after_icon">Badge after icon (first row)</string>
     <string name="src_layout_second_start">Badge on second row, left</string>

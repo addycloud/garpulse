@@ -1,6 +1,7 @@
 package dev.easonhuang.garpulse.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -45,6 +46,21 @@ class DashboardPreferences(private val context: Context) {
     private val orderKey = stringPreferencesKey("card_order")
     private val hiddenKey = stringSetPreferencesKey("hidden_cards")
     private val columnsKey = intPreferencesKey("overview_columns")
+    private val sparkBehindKey = booleanPreferencesKey("spark_behind")
+
+    /**
+     * Where the trend sparkline sits on Overview cards: false = its own slot below the
+     * title and value (default); true = drawn behind the title and value as a backdrop.
+     */
+    val sparkBehind: Flow<Boolean> = context.dashboardDataStore.data.map { prefs ->
+        prefs[sparkBehindKey] ?: false
+    }
+
+    suspend fun saveSparkBehind(behind: Boolean) {
+        context.dashboardDataStore.edit { prefs ->
+            prefs[sparkBehindKey] = behind
+        }
+    }
 
     /** Overview grid columns; clamped to 1..10, defaulting to 3. */
     val columns: Flow<Int> = context.dashboardDataStore.data.map { prefs ->

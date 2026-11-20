@@ -220,6 +220,14 @@
     <string name="dev_master_switch">开发者调节</string>
     <string name="dev_refresh_frames">波浪时长：%1$d 帧</string>
     <string name="dev_source_layout">概览来源标签位置</string>
+    <string name="dev_source_style">概览来源标签样式</string>
+    <string name="dev_source_style_hint">标签的绘制方式。开启开发者调节后，“不显示”会隐藏所有标签，其余样式在仅健康连接模式下也会强制显示标签，方便组合对比效果。</string>
+    <string name="src_style_text">色点 + 文字</string>
+    <string name="src_style_dot">仅色点</string>
+    <string name="src_style_hidden">不显示</string>
+    <string name="settings_overview_spark">概览趋势图位置</string>
+    <string name="settings_overview_spark_separated">图表独立展示在数值下方</string>
+    <string name="settings_overview_spark_behind">图表衬于标题和数据下层</string>
     <string name="src_layout_after_title">标题在首行图标后，来源跟标题后</string>
     <string name="src_layout_after_icon">来源在首行图标后</string>
     <string name="src_layout_second_start">来源在第二行居左</string>

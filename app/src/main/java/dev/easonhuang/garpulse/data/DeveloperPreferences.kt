@@ -32,6 +32,22 @@ enum class SourceBadgeLayout(val key: String, @StringRes val labelRes: Int) {
     }
 }
 
+/** How the source badge is rendered on an Overview metric card. */
+enum class SourceBadgeStyle(val key: String, @StringRes val labelRes: Int) {
+    /** Colour dot + short text pill (the default). */
+    TEXT("text", R.string.src_style_text),
+    /** Colour dot only — meaning carried by colour, layout stays minimal. */
+    DOT("dot", R.string.src_style_dot),
+    /** No badge at all. */
+    HIDDEN("hidden", R.string.src_style_hidden),
+    ;
+
+    companion object {
+        fun fromKey(key: String?): SourceBadgeStyle =
+            entries.firstOrNull { it.key == key } ?: TEXT
+    }
+}
+
 /**
  * Developer tuning knobs, exposed in Settings → 开发者 behind a master switch. Lets the user
  * adjust rendering effects (refresh-strip wave speed/duration, source badge layout on the
@@ -59,6 +75,11 @@ class DeveloperPreferences(private val context: Context) {
         SourceBadgeLayout.fromKey(prefs[LAYOUT_KEY])
     }
 
+    /** Source badge rendering style (text / dot / hidden). */
+    val sourceBadgeStyle: Flow<SourceBadgeStyle> = context.developerDataStore.data.map { prefs ->
+        SourceBadgeStyle.fromKey(prefs[STYLE_KEY])
+    }
+
     suspend fun setEnabled(value: Boolean) = context.developerDataStore.edit { prefs ->
         prefs[ENABLED_KEY] = value
     }
@@ -75,11 +96,16 @@ class DeveloperPreferences(private val context: Context) {
         prefs[LAYOUT_KEY] = layout.key
     }
 
+    suspend fun setSourceBadgeStyle(style: SourceBadgeStyle) = context.developerDataStore.edit { prefs ->
+        prefs[STYLE_KEY] = style.key
+    }
+
     companion object {
         private val ENABLED_KEY = booleanPreferencesKey("dev_enabled")
         private val SPEED_KEY = floatPreferencesKey("dev_refresh_anim_speed")
         private val FRAMES_KEY = intPreferencesKey("dev_refresh_anim_frames")
         private val LAYOUT_KEY = stringPreferencesKey("dev_source_badge_layout")
+        private val STYLE_KEY = stringPreferencesKey("dev_source_badge_style")
 
         const val DEFAULT_ENABLED = true
         const val DEFAULT_SPEED = 5f   // original wave ran at 90 ms/frame; 5× = 18 ms
