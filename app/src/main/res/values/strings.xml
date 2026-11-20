@@ -215,6 +215,7 @@
     <string name="widget_editor_show_labels">Show labels and values</string>
     <string name="widget_editor_strip_coverage">Refresh strip coverage: %1$d%%</string>
     <string name="widget_editor_strip_wave">Wave amplitude: %1$d%%</string>
+    <string name="widget_editor_strip_opacity">Refresh strip opacity: %1$d%%</string>
     <string name="widget_editor_strip_color">Refresh strip colour</string>
     <string name="widget_editor_strip_color_auto">Default ribbon</string>
     <string name="widget_editor_strip_hint">Fully transparent = invisible, but tapping the strip area still refreshes.</string>

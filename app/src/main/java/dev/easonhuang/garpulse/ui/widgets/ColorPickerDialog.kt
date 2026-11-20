@@ -3,23 +3,17 @@ package dev.easonhuang.garpulse.ui.widgets
 import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,21 +28,22 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.easonhuang.garpulse.R
+import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
-private val SWATCHES = listOf(
-    0xFFFFFFFF, 0xFF1E2433, 0xFF0B0F19, 0xFF243447,
-    0xFFB3261E, 0xFFF59E0B, 0xFF1B8A5A, 0xFF2563EB,
-    0xFF7C3AED, 0xFFEC4899, 0xFF06B6D4, 0xFF84CC16,
-)
-
-/** HSV colour picker with a saturation/value field, hue and opacity sliders and hex input. */
+/**
+ * Minimal colour picker: one circular hue wheel plus an opacity slider. Hue is picked by
+ * tapping/dragging the ring; the disc centre previews the current colour. Deliberately no
+ * saturation/value field, presets or hex input — the two controls cover everyday tuning.
+ */
 @Composable
 fun ColorPickerDialog(
     initial: Color,
@@ -62,134 +57,31 @@ fun ColorPickerDialog(
         FloatArray(3).also { AndroidColor.colorToHSV(initial.toArgb(), it) }
     }
     var hue by remember { mutableFloatStateOf(hsv[0]) }
-    var saturation by remember { mutableFloatStateOf(hsv[1]) }
-    var brightness by remember { mutableFloatStateOf(hsv[2]) }
     var alpha by remember { mutableFloatStateOf(initial.alpha) }
-    var hex by remember { mutableStateOf("%08X".format(initial.toArgb())) }
-    var invalid by remember { mutableStateOf(false) }
 
     fun current(): Color = Color(
         AndroidColor.HSVToColor(
             (alpha * 255f).roundToInt().coerceIn(0, 255),
-            floatArrayOf(hue, saturation, brightness),
+            floatArrayOf(hue, 1f, 1f),
         ),
     )
-
-    fun syncFrom(color: Color) {
-        val argb = color.toArgb()
-        val values = FloatArray(3)
-        AndroidColor.colorToHSV(argb, values)
-        hue = values[0]
-        saturation = values[1]
-        brightness = values[2]
-        alpha = color.alpha
-        hex = "%08X".format(argb)
-        invalid = false
-    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.color_picker_title)) },
         text = {
-            Column {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(170.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .pointerInput(hue) {
-                            detectDragGestures { change, _ ->
-                                saturation = (change.position.x / size.width).coerceIn(0f, 1f)
-                                brightness = (1f - change.position.y / size.height).coerceIn(0f, 1f)
-                                hex = "%08X".format(current().toArgb())
-                            }
-                        }
-                        .pointerInput(hue) {
-                            detectTapGestures { pos ->
-                                saturation = (pos.x / size.width).coerceIn(0f, 1f)
-                                brightness = (1f - pos.y / size.height).coerceIn(0f, 1f)
-                                hex = "%08X".format(current().toArgb())
-                            }
-                        },
-                ) {
-                    Canvas(Modifier.fillMaxWidth().height(170.dp)) {
-                        drawRect(SolidColor(Color(AndroidColor.HSVToColor(floatArrayOf(hue, 1f, 1f)))), size = size)
-                        drawRect(
-                            Brush.horizontalGradient(listOf(Color.Transparent, Color.White)),
-                            size = size,
-                        )
-                        drawRect(
-                            Brush.verticalGradient(listOf(Color.Transparent, Color.Black)),
-                            size = size,
-                        )
-                        val center = Offset(saturation * size.width, (1f - brightness) * size.height)
-                        drawCircle(Color.White, radius = 10.dp.toPx(), center = center)
-                        drawCircle(Color.Black, radius = 7.dp.toPx(), center = center)
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                SliderBar(
-                    progress = hue / 360f,
-                    onChange = { changed ->
-                        hue = changed * 360f
-                        hex = "%08X".format(current().toArgb())
-                    },
-                    brush = {
-                        Brush.horizontalGradient((0..12).map { Color(AndroidColor.HSVToColor(floatArrayOf(it * 30f, 1f, 1f))) })
-                    },
-                )
-                Spacer(Modifier.height(8.dp))
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                HueWheel(hue = hue, onChange = { hue = it })
+                Spacer(Modifier.height(14.dp))
                 SliderBar(
                     progress = alpha,
-                    onChange = { changed ->
-                        alpha = changed
-                        hex = "%08X".format(current().toArgb())
-                    },
+                    onChange = { alpha = it },
                     brush = {
                         val solid = current().copy(alpha = 1f)
                         Brush.horizontalGradient(listOf(solid.copy(alpha = 0f), solid))
                     },
                 )
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = hex,
-                    onValueChange = { input ->
-                        val cleaned = input.uppercase().filter { it.isDigit() || it in 'A'..'F' }.take(8)
-                        hex = cleaned
-                        if (cleaned.length == 6 || cleaned.length == 8) {
-                            runCatching {
-                                val value = ("FF" + cleaned).takeLast(8).toLong(16).toInt()
-                                syncFrom(Color(value))
-                            }.onFailure { invalid = true }
-                        } else invalid = cleaned.isNotEmpty()
-                    },
-                    label = { Text(stringResource(R.string.color_picker_hex)) },
-                    singleLine = true,
-                    isError = invalid,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (invalid) {
-                    Text(
-                        stringResource(R.string.color_picker_invalid),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                Spacer(Modifier.height(10.dp))
-                Text(stringResource(R.string.color_picker_presets), style = MaterialTheme.typography.labelMedium)
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SWATCHES.forEach { argb ->
-                        Box(
-                            Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(Color(argb.toInt()))
-                                .clickable { syncFrom(Color(argb.toInt())) },
-                        )
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(12.dp))
                 Box(
                     Modifier
                         .fillMaxWidth()
@@ -209,6 +101,59 @@ fun ColorPickerDialog(
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },
     )
+}
+
+/** Hue from a point inside the wheel, measured clockwise from the +x axis (sweep-gradient order). */
+private fun hueAt(pos: Offset, width: Float, height: Float): Float {
+    val dx = pos.x - width / 2f
+    val dy = pos.y - height / 2f
+    var degrees = Math.toDegrees(atan2(dy, dx).toDouble()).toFloat()
+    if (degrees < 0f) degrees += 360f
+    return degrees
+}
+
+@Composable
+private fun HueWheel(hue: Float, onChange: (Float) -> Unit) {
+    Canvas(
+        Modifier
+            .size(210.dp)
+            .pointerInput(Unit) {
+                detectDragGestures { change, _ ->
+                    onChange(hueAt(change.position, size.width.toFloat(), size.height.toFloat()))
+                }
+            }
+            .pointerInput(Unit) {
+                detectTapGestures { pos ->
+                    onChange(hueAt(pos, size.width.toFloat(), size.height.toFloat()))
+                }
+            },
+    ) {
+        val stroke = 40.dp.toPx()
+        val radius = (size.minDimension - stroke) / 2f
+        val center = Offset(size.width / 2f, size.height / 2f)
+        // Hue ring: 37 stops so the sweep wraps seamlessly back to red.
+        val hues = (0..36).map { Color(AndroidColor.HSVToColor(floatArrayOf(it * 10f, 1f, 1f))) }
+        drawCircle(
+            brush = Brush.sweepGradient(hues),
+            radius = radius + stroke / 2f,
+            center = center,
+            style = Stroke(width = stroke),
+        )
+        // Marker at the selected hue, sitting on the ring's midline.
+        val radians = Math.toRadians(hue.toDouble())
+        val marker = center + Offset(
+            (cos(radians) * radius).toFloat(),
+            (sin(radians) * radius).toFloat(),
+        )
+        drawCircle(Color.White, radius = 11.dp.toPx(), center = marker)
+        drawCircle(Color.Black, radius = 8.dp.toPx(), center = marker)
+        // Centre preview of the current fully-opaque colour.
+        drawCircle(
+            Color(AndroidColor.HSVToColor(floatArrayOf(hue, 1f, 1f))),
+            radius = radius - stroke / 2f - 6.dp.toPx(),
+            center = center,
+        )
+    }
 }
 
 @Composable

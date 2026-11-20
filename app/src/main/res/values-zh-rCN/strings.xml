@@ -203,6 +203,7 @@
     <string name="widget_editor_show_labels">显示标签和数值</string>
     <string name="widget_editor_strip_coverage">刷新条覆盖范围：%1$d%%</string>
     <string name="widget_editor_strip_wave">波浪幅度：%1$d%%</string>
+    <string name="widget_editor_strip_opacity">刷新条透明度：%1$d%%</string>
     <string name="widget_editor_strip_color">刷新条颜色</string>
     <string name="widget_editor_strip_color_auto">默认丝带</string>
     <string name="widget_editor_strip_hint">完全透明时看不到，但该区域点击仍会触发刷新。</string>

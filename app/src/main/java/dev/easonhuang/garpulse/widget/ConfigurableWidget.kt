@@ -249,18 +249,19 @@ private fun RefreshStrip(
     widthDp: Float,
     heightDp: Float,
 ) {
-    // Coverage 5..100% of the widget width, measured from the left edge. A custom colour keeps
-    // its own alpha (fully transparent = invisible, but the strip stays tappable). The default
-    // colour keeps the original animated translucent-white ribbon.
+    // Coverage 5..100% of the widget width, measured from the left edge. Opacity comes from the
+    // dedicated slider (multiplied into any custom colour's own alpha); a soft flicker is kept
+    // for the default white ribbon only, and a fully transparent strip stays tappable.
     val coverage = config.stripCoverage.coerceIn(
         WidgetConfig.MIN_STRIP_COVERAGE, WidgetConfig.MAX_STRIP_COVERAGE,
     ) / 100f
     val stripWidthDp = (widthDp * coverage).coerceAtLeast(2f)
     val base = config.stripColor ?: Color.White
+    val opacity = config.stripOpacity.coerceIn(0, 100) / 100f
     val alpha = if (config.stripColor != null) {
-        base.alpha
+        base.alpha * opacity
     } else {
-        0.26f + (frame % 4) * 0.05f
+        (opacity + (frame % 4) * 0.05f).coerceAtMost(1f)
     }
     val bitmap = WidgetRefreshStrip.bitmap(
         colorArgb = base.copy(alpha = alpha).toArgb(),

@@ -76,6 +76,8 @@ data class WidgetConfig(
     val showSource: Boolean = false,
     /** Refresh-strip coverage of the widget width from the left edge, 5..100 (%). */
     val stripCoverage: Int = 10,
+    /** Refresh-strip opacity 0..100 (100 = fully opaque). Multiplied into any custom colour alpha. */
+    val stripOpacity: Int = 30,
     /** Refresh-strip colour incl. alpha; null keeps the original translucent white ribbon. */
     val stripColor: Color? = null,
     /** Refresh-strip wave amplitude multiplier, 0..2 (1 = original ribbon wave). */
@@ -160,6 +162,7 @@ internal object WidgetPrefs {
     val IMAGE_OPACITY = intPreferencesKey("widget_image_opacity")
     val SHOW_SOURCE = booleanPreferencesKey("widget_show_source")
     val STRIP_COVERAGE = intPreferencesKey("widget_strip_coverage")
+    val STRIP_OPACITY = intPreferencesKey("widget_strip_opacity")
     val STRIP_COLOR = longPreferencesKey("widget_strip_color")
     val STRIP_WAVE = floatPreferencesKey("widget_strip_wave")
     val METRIC_COLORS = stringPreferencesKey("widget_metric_colors")
@@ -209,6 +212,7 @@ internal object WidgetConfigCodec {
         prefs[WidgetPrefs.STRIP_COVERAGE] = config.stripCoverage.coerceIn(
             WidgetConfig.MIN_STRIP_COVERAGE, WidgetConfig.MAX_STRIP_COVERAGE,
         )
+        prefs[WidgetPrefs.STRIP_OPACITY] = config.stripOpacity.coerceIn(0, 100)
         prefs[WidgetPrefs.STRIP_COLOR] = config.stripColor?.toArgbLong() ?: NO_ACCENT
         prefs[WidgetPrefs.STRIP_WAVE] = config.stripWave.coerceIn(
             WidgetConfig.MIN_STRIP_WAVE, WidgetConfig.MAX_STRIP_WAVE,
@@ -265,6 +269,7 @@ internal object WidgetConfigCodec {
             stripCoverage = (prefs[WidgetPrefs.STRIP_COVERAGE] ?: defaults.stripCoverage).coerceIn(
                 WidgetConfig.MIN_STRIP_COVERAGE, WidgetConfig.MAX_STRIP_COVERAGE,
             ),
+            stripOpacity = (prefs[WidgetPrefs.STRIP_OPACITY] ?: defaults.stripOpacity).coerceIn(0, 100),
             stripColor = prefs[WidgetPrefs.STRIP_COLOR]
                 ?.takeIf { it != NO_ACCENT }
                 ?.let(::colorFromLong) ?: defaults.stripColor,
@@ -302,6 +307,7 @@ internal object WidgetConfigCodec {
         if (config.showSource) "1" else "0",
         config.tapUri ?: "",
         config.stripCoverage.toString(),
+        config.stripOpacity.toString(),
         (config.stripColor?.toArgbLong() ?: NO_ACCENT).toString(),
         config.stripWave.toString(),
         encodeMetricColors(config.metricColors),
@@ -337,12 +343,13 @@ internal object WidgetConfigCodec {
                 showSource = f.getOrNull(18) == "1",
                 stripCoverage = (f.getOrNull(20)?.toIntOrNull() ?: 10)
                     .coerceIn(WidgetConfig.MIN_STRIP_COVERAGE, WidgetConfig.MAX_STRIP_COVERAGE),
-                stripColor = f.getOrNull(21)?.toLongOrNull()
+                stripOpacity = (f.getOrNull(21)?.toIntOrNull() ?: 30).coerceIn(0, 100),
+                stripColor = f.getOrNull(22)?.toLongOrNull()
                     ?.takeIf { it != NO_ACCENT }
                     ?.let(::colorFromLong),
-                stripWave = (f.getOrNull(22)?.toFloatOrNull() ?: 1f)
+                stripWave = (f.getOrNull(23)?.toFloatOrNull() ?: 1f)
                     .coerceIn(WidgetConfig.MIN_STRIP_WAVE, WidgetConfig.MAX_STRIP_WAVE),
-                metricColors = decodeMetricColors(f.getOrNull(23)),
+                metricColors = decodeMetricColors(f.getOrNull(24)),
             )
         }.getOrNull()
     }

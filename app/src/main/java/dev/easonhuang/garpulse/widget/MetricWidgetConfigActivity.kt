@@ -571,6 +571,13 @@ private fun WidgetEditor(
                             steps = 7,
                             onChange = { config = config.copy(stripWave = it) },
                         )
+                        SliderRow(
+                            label = stringResource(R.string.widget_editor_strip_opacity, config.stripOpacity),
+                            value = config.stripOpacity.toFloat(),
+                            range = 0f..100f,
+                            steps = 9,
+                            onChange = { config = config.copy(stripOpacity = it.toInt()) },
+                        )
                         SettingLabel(stringResource(R.string.widget_editor_strip_color))
                         ColorRow(
                             color = config.stripColor ?: Color.White,

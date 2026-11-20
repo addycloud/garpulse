@@ -164,7 +164,7 @@ fun DashboardScreen(
             val all = allSummaries
             val stored = layout
             if (all != null && stored != null) {
-                EditGrid(all, stored, contentPadding, showSource = effectiveShowSource, sourceLayout = sourceBadgeLayout, sourceStyle = effectiveSourceStyle, sparkBehind = sparkBehind, onSave = vm::saveLayout)
+                EditGrid(all, stored, contentPadding, gridColumns, showSource = effectiveShowSource, sourceLayout = sourceBadgeLayout, sourceStyle = effectiveSourceStyle, sparkBehind = sparkBehind, onSave = vm::saveLayout)
             }
             return@Scaffold
         }
@@ -201,6 +201,7 @@ private fun EditGrid(
     all: Map<Metric, MetricSummary>,
     stored: DashboardLayout,
     contentPadding: PaddingValues,
+    gridColumns: Int,
     showSource: Boolean,
     sourceLayout: SourceBadgeLayout,
     sourceStyle: SourceBadgeStyle,
@@ -244,7 +245,9 @@ private fun EditGrid(
     }
 
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+        // Keep the user's column count in edit mode too, so a card never jumps to a different
+        // grid than the one they arranged.
+        columns = GridCells.Fixed(gridColumns.coerceIn(1, 10)),
         state = gridState,
         contentPadding = contentPadding,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
