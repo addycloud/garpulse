@@ -74,6 +74,14 @@ data class WidgetConfig(
     val imageOpacity: Int = 60,
     /** Show a small colour-coded data-source tag on each metric card. */
     val showSource: Boolean = false,
+    /** Refresh-strip coverage of the widget width from the left edge, 5..100 (%). */
+    val stripCoverage: Int = 10,
+    /** Refresh-strip colour incl. alpha; null keeps the original translucent white ribbon. */
+    val stripColor: Color? = null,
+    /** Refresh-strip wave amplitude multiplier, 0..2 (1 = original ribbon wave). */
+    val stripWave: Float = 1f,
+    /** Per-metric colour overrides keyed by [Metric.key]; missing keys use the metric accent. */
+    val metricColors: Map<String, Color> = emptyMap(),
 ) {
     val effectiveBackground: Color
         get() = backgroundColor.copy(alpha = (backgroundOpacity.coerceIn(0, 100) / 100f))
@@ -91,6 +99,10 @@ data class WidgetConfig(
         const val MAX_FONT_SP = 42
         const val MIN_FONT_SCALE = 0.6f
         const val MAX_FONT_SCALE = 1.6f
+        const val MIN_STRIP_COVERAGE = 5
+        const val MAX_STRIP_COVERAGE = 100
+        const val MIN_STRIP_WAVE = 0f
+        const val MAX_STRIP_WAVE = 2f
 
         val DEFAULT = WidgetConfig()
 
@@ -147,6 +159,10 @@ internal object WidgetPrefs {
     val IMAGE_PATH = stringPreferencesKey("widget_image_path")
     val IMAGE_OPACITY = intPreferencesKey("widget_image_opacity")
     val SHOW_SOURCE = booleanPreferencesKey("widget_show_source")
+    val STRIP_COVERAGE = intPreferencesKey("widget_strip_coverage")
+    val STRIP_COLOR = longPreferencesKey("widget_strip_color")
+    val STRIP_WAVE = floatPreferencesKey("widget_strip_wave")
+    val METRIC_COLORS = stringPreferencesKey("widget_metric_colors")
     val SNAPSHOTS = stringPreferencesKey("widget_snapshots")
 
     // Legacy keys kept so existing widget instances can still render before being reconfigured.
@@ -190,6 +206,14 @@ internal object WidgetConfigCodec {
         prefs[WidgetPrefs.IMAGE_PATH] = config.imagePath?.takeIf { it.isNotBlank() } ?: ""
         prefs[WidgetPrefs.IMAGE_OPACITY] = config.imageOpacity.coerceIn(0, 100)
         prefs[WidgetPrefs.SHOW_SOURCE] = config.showSource
+        prefs[WidgetPrefs.STRIP_COVERAGE] = config.stripCoverage.coerceIn(
+            WidgetConfig.MIN_STRIP_COVERAGE, WidgetConfig.MAX_STRIP_COVERAGE,
+        )
+        prefs[WidgetPrefs.STRIP_COLOR] = config.stripColor?.toArgbLong() ?: NO_ACCENT
+        prefs[WidgetPrefs.STRIP_WAVE] = config.stripWave.coerceIn(
+            WidgetConfig.MIN_STRIP_WAVE, WidgetConfig.MAX_STRIP_WAVE,
+        )
+        prefs[WidgetPrefs.METRIC_COLORS] = encodeMetricColors(config.metricColors)
         // Once a full config is written the legacy single-metric keys must be gone, otherwise a
         // deliberately empty metric list would be resurrected as a "steps" snapshot on render.
         prefs.remove(WidgetPrefs.LEGACY_METRIC)
@@ -238,6 +262,16 @@ internal object WidgetConfigCodec {
             imagePath = prefs[WidgetPrefs.IMAGE_PATH]?.takeIf { it.isNotBlank() } ?: defaults.imagePath,
             imageOpacity = (prefs[WidgetPrefs.IMAGE_OPACITY] ?: defaults.imageOpacity).coerceIn(0, 100),
             showSource = prefs[WidgetPrefs.SHOW_SOURCE] ?: defaults.showSource,
+            stripCoverage = (prefs[WidgetPrefs.STRIP_COVERAGE] ?: defaults.stripCoverage).coerceIn(
+                WidgetConfig.MIN_STRIP_COVERAGE, WidgetConfig.MAX_STRIP_COVERAGE,
+            ),
+            stripColor = prefs[WidgetPrefs.STRIP_COLOR]
+                ?.takeIf { it != NO_ACCENT }
+                ?.let(::colorFromLong) ?: defaults.stripColor,
+            stripWave = (prefs[WidgetPrefs.STRIP_WAVE] ?: defaults.stripWave).coerceIn(
+                WidgetConfig.MIN_STRIP_WAVE, WidgetConfig.MAX_STRIP_WAVE,
+            ),
+            metricColors = decodeMetricColors(prefs[WidgetPrefs.METRIC_COLORS]).ifEmpty { defaults.metricColors },
         )
     }
 
@@ -267,6 +301,10 @@ internal object WidgetConfigCodec {
         config.imageOpacity.toString(),
         if (config.showSource) "1" else "0",
         config.tapUri ?: "",
+        config.stripCoverage.toString(),
+        (config.stripColor?.toArgbLong() ?: NO_ACCENT).toString(),
+        config.stripWave.toString(),
+        encodeMetricColors(config.metricColors),
     ).joinToString(FIELD.toString())
 
     fun decodeDraft(raw: String?): WidgetConfig? {
@@ -297,6 +335,14 @@ internal object WidgetConfigCodec {
                 imagePath = f[16].ifBlank { null },
                 imageOpacity = f[17].toInt().coerceIn(0, 100),
                 showSource = f.getOrNull(18) == "1",
+                stripCoverage = (f.getOrNull(20)?.toIntOrNull() ?: 10)
+                    .coerceIn(WidgetConfig.MIN_STRIP_COVERAGE, WidgetConfig.MAX_STRIP_COVERAGE),
+                stripColor = f.getOrNull(21)?.toLongOrNull()
+                    ?.takeIf { it != NO_ACCENT }
+                    ?.let(::colorFromLong),
+                stripWave = (f.getOrNull(22)?.toFloatOrNull() ?: 1f)
+                    .coerceIn(WidgetConfig.MIN_STRIP_WAVE, WidgetConfig.MAX_STRIP_WAVE),
+                metricColors = decodeMetricColors(f.getOrNull(23)),
             )
         }.getOrNull()
     }
@@ -350,8 +396,7 @@ internal object WidgetConfigCodec {
         }.toMap()
     }
 
-    /** Legacy instances only stored one metric and one value; keep them alive. */
-    fun legacySnapshot(prefs: Preferences, defaults: WidgetConfig): List<WidgetMetricState> {
+    /** Legacy instances only stored one metric and one value; keep them alive. */    fun legacySnapshot(prefs: Preferences, defaults: WidgetConfig): List<WidgetMetricState> {
         val key = prefs[WidgetPrefs.LEGACY_METRIC] ?: return emptyList()
         val value = prefs[WidgetPrefs.LEGACY_VALUE] ?: "-"
         return listOf(
@@ -368,6 +413,21 @@ internal object WidgetConfigCodec {
 
     private fun legacyMetrics(prefs: Preferences, defaults: WidgetConfig): List<Metric> =
         prefs[WidgetPrefs.LEGACY_METRIC]?.let(Metric::fromKey)?.let(::listOf) ?: defaults.metrics
+
+    /** "key:argb" pairs joined by commas; metric keys never contain colons. */
+    private fun encodeMetricColors(colors: Map<String, Color>): String =
+        colors.entries.filter { it.value.alpha > 0f }
+            .joinToString(",") { "${it.key}:${it.value.toArgbLong()}" }
+
+    internal fun decodeMetricColors(raw: String?): Map<String, Color> {
+        if (raw.isNullOrBlank()) return emptyMap()
+        return raw.split(',').mapNotNull { pair ->
+            val parts = pair.split(':')
+            if (parts.size != 2) return@mapNotNull null
+            val argb = parts[1].toLongOrNull() ?: return@mapNotNull null
+            parts[0] to colorFromLong(argb)
+        }.toMap()
+    }
 
     private fun Color.toArgbLong(): Long = this.toArgbCompat().toLong() and 0xFFFFFFFFL
     private fun colorFromLong(value: Long): Color = Color(value.toInt())

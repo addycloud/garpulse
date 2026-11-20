@@ -140,6 +140,12 @@
     <string name="settings_export_summary">将可访问的数据保存为文件（CSV 或 JSON）</string>
     <string name="settings_section_display">显示</string>
     <string name="settings_section_export">导出</string>
+    <string name="settings_app_icon">应用图标</string>
+    <string name="settings_app_icon_summary">选择桌面图标样式</string>
+    <string name="settings_app_icon_applied">图标已更换，稍候会出现在桌面上。</string>
+    <string name="icon_default">GarPulse（渐变）</string>
+    <string name="icon_dark">暗色</string>
+    <string name="icon_light">亮色</string>
     <string name="settings_overview_columns">概览列数</string>
     <string name="settings_overview_columns_summary">概览页每行显示 %1$d 列</string>
     <string name="settings_units">单位</string>
@@ -188,6 +194,13 @@
     <string name="widget_editor_background">背景颜色</string>
     <string name="widget_editor_show_chart">显示图表</string>
     <string name="widget_editor_show_labels">显示标签和数值</string>
+    <string name="widget_editor_strip_coverage">刷新条覆盖范围：%1$d%%</string>
+    <string name="widget_editor_strip_wave">波浪幅度：%1$d%%</string>
+    <string name="widget_editor_strip_color">刷新条颜色</string>
+    <string name="widget_editor_strip_color_auto">默认丝带</string>
+    <string name="widget_editor_strip_hint">完全透明时看不到，但该区域点击仍会触发刷新。</string>
+    <string name="widget_editor_metric_color">自定义颜色</string>
+    <string name="widget_editor_metric_color_auto">%1$s：自动颜色</string>
     <string name="widget_editor_refresh_strip">左侧刷新条</string>
     <string name="widget_editor_tap">点按时打开应用</string>
     <string name="widget_editor_search_app">搜索应用</string>
@@ -320,6 +333,9 @@
     <string name="source_health_connect_desc">仅从健康同步读取数据</string>
     <string name="source_auto_desc">同时读取两个来源 — 每张卡片显示有数据的那个来源，并用颜色标签区分</string>
     <string name="source_garmin_api_desc">仅通过你的佳明密钥读取</string>
+    <string name="settings_source_priority">数据源优先级</string>
+    <string name="settings_source_priority_garmin">两个来源都有数据时优先取 Garmin</string>
+    <string name="settings_source_priority_hc">两个来源都有数据时优先取 Health Connect</string>
     <string name="settings_data_source">数据来源</string>
     <string name="settings_current_source">当前取值来源</string>
     <string name="settings_garmin_api">佳明个人 API</string>

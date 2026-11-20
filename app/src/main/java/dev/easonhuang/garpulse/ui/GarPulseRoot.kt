@@ -61,8 +61,8 @@ private const val HEALTH_CONNECT_PACKAGE = "com.google.android.apps.healthdata"
 private enum class Dest(val route: String, @StringRes val label: Int, val icon: ImageVector) {
     TODAY("today", R.string.nav_today, Icons.Rounded.Today),
     SUMMARY("summary", R.string.nav_summary, Icons.Rounded.Insights),
-    SETTINGS("settings", R.string.nav_settings, Icons.Rounded.Settings),
     WIDGETS("widgets", R.string.nav_widgets, Icons.Rounded.Widgets),
+    SETTINGS("settings", R.string.nav_settings, Icons.Rounded.Settings),
 }
 
 @Composable

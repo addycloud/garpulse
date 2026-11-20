@@ -148,6 +148,12 @@
     <string name="settings_export_summary">Save your accessible data to a file (CSV or JSON)</string>
     <string name="settings_section_display">Display</string>
     <string name="settings_section_export">Export</string>
+    <string name="settings_app_icon">App icon</string>
+    <string name="settings_app_icon_summary">Choose the launcher icon style</string>
+    <string name="settings_app_icon_applied">Icon changed — it may take a moment to appear on your home screen.</string>
+    <string name="icon_default">GarPulse (gradient)</string>
+    <string name="icon_dark">Dark</string>
+    <string name="icon_light">Light</string>
     <string name="settings_overview_columns">Overview columns</string>
     <string name="settings_overview_columns_summary">%1$d columns on the Overview screen</string>
     <string name="settings_units">Units</string>
@@ -200,6 +206,13 @@
     <string name="widget_editor_background">Background colour</string>
     <string name="widget_editor_show_chart">Show chart</string>
     <string name="widget_editor_show_labels">Show labels and values</string>
+    <string name="widget_editor_strip_coverage">Refresh strip coverage: %1$d%%</string>
+    <string name="widget_editor_strip_wave">Wave amplitude: %1$d%%</string>
+    <string name="widget_editor_strip_color">Refresh strip colour</string>
+    <string name="widget_editor_strip_color_auto">Default ribbon</string>
+    <string name="widget_editor_strip_hint">Fully transparent = invisible, but tapping the strip area still refreshes.</string>
+    <string name="widget_editor_metric_color">Custom colour</string>
+    <string name="widget_editor_metric_color_auto">%1$s: automatic colour</string>
     <string name="widget_editor_refresh_strip">Left refresh strip</string>
     <string name="widget_editor_tap">Open app on tap</string>
     <string name="widget_editor_search_app">Search apps</string>
@@ -332,6 +345,9 @@
     <string name="source_health_connect_desc">Read only from Health Connect</string>
     <string name="source_auto_desc">Read from both at once — each tile shows whichever source has data, labelled by colour</string>
     <string name="source_garmin_api_desc">Read only from your Garmin Personal API key</string>
+    <string name="settings_source_priority">Source priority</string>
+    <string name="settings_source_priority_garmin">Garmin first when both sources have data</string>
+    <string name="settings_source_priority_hc">Health Connect first when both sources have data</string>
     <string name="settings_data_source">Data source</string>
     <string name="settings_current_source">Currently reading from</string>
     <string name="settings_garmin_api">Garmin Personal API</string>

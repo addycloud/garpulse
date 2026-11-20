@@ -35,7 +35,14 @@ internal object WidgetRefreshStrip {
      * underlies the whole strip so the gaps between metric cards never chop it into pieces;
      * the gentle wave on top is the part that animates. [phase] shifts only that wave.
      */
-    fun bitmap(colorArgb: Int, widthPx: Int, heightPx: Int, phase: Int): Bitmap {
+    fun bitmap(
+        colorArgb: Int,
+        widthPx: Int,
+        heightPx: Int,
+        phase: Int,
+        /** Amplitude multiplier for the wave; 0 flattens it, 1 is the original ribbon. */
+        wave: Float = 1f,
+    ): Bitmap {
         val w = widthPx.coerceAtLeast(2)
         val h = heightPx.coerceAtLeast(2)
         val result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
@@ -51,14 +58,15 @@ internal object WidgetRefreshStrip {
             },
         )
 
-        // Soft wave sitting on the rail, low amplitude so it reads as a ribbon, not a zig-zag.
+        // Soft wave sitting on the rail; amplitude scales with the user's multiplier so it can
+        // be flattened out or exaggerated. Low amplitude reads as a ribbon, not a zig-zag.
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = colorArgb
             style = Paint.Style.FILL
         }
         val heightF = h.toFloat()
         val baseX = w * 0.52f
-        val amplitude = w * 0.14f
+        val amplitude = w * 0.14f * wave
         val path = Path().apply {
             moveTo(0f, 0f)
             lineTo(baseX, 0f)

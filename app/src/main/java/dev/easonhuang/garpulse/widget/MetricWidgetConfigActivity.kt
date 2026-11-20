@@ -229,7 +229,13 @@ class MetricWidgetConfigActivity : ComponentActivity() {
 
 private data class LauncherApp(val packageName: String, val label: String, val component: String, val uri: String? = null)
 
-private enum class ColorTarget { BACKGROUND, CARD, TEXT }
+private sealed interface ColorTarget {
+    data object BACKGROUND : ColorTarget
+    data object CARD : ColorTarget
+    data object TEXT : ColorTarget
+    data class METRIC(val key: String, val metric: Metric) : ColorTarget
+    data object STRIP : ColorTarget
+}
 
 private val COLOR_PRESETS = listOf(
     0xFF1E2433, 0xFF0B0F19, 0xFF243447,
@@ -380,13 +386,16 @@ private fun WidgetEditor(
                         }
                         MetricRow(
                             title = metric.title,
-                            accent = Color(metric.accent.toArgb()),
+                            accent = config.metricColors[metric.key]
+                                ?: Color(metric.accent.toArgb()),
                             tapLabel = tapLabel,
                             onSetApp = { appPickerMetric = metric.key },
+                            onSetColor = { colorTarget = ColorTarget.METRIC(metric.key, metric) },
                             onRemove = {
                                 config = config.copy(
                                     metrics = config.metrics - metric,
                                     tapTargets = config.tapTargets - metric.key,
+                                    metricColors = config.metricColors - metric.key,
                                 )
                             },
                         )
@@ -464,6 +473,36 @@ private fun WidgetEditor(
                     }
                     ToggleRow(stringResource(R.string.widget_editor_refresh_strip), config.showRefreshStrip) {
                         config = config.copy(showRefreshStrip = it)
+                    }
+                    if (config.showRefreshStrip) {
+                        SliderRow(
+                            label = stringResource(R.string.widget_editor_strip_coverage, config.stripCoverage),
+                            value = config.stripCoverage.toFloat(),
+                            range = WidgetConfig.MIN_STRIP_COVERAGE.toFloat()..WidgetConfig.MAX_STRIP_COVERAGE.toFloat(),
+                            steps = 18,
+                            onChange = { config = config.copy(stripCoverage = it.roundToInt()) },
+                        )
+                        SliderRow(
+                            label = stringResource(
+                                R.string.widget_editor_strip_wave,
+                                (config.stripWave * 100f).roundToInt(),
+                            ),
+                            value = config.stripWave,
+                            range = WidgetConfig.MIN_STRIP_WAVE..WidgetConfig.MAX_STRIP_WAVE,
+                            steps = 7,
+                            onChange = { config = config.copy(stripWave = it) },
+                        )
+                        SettingLabel(stringResource(R.string.widget_editor_strip_color))
+                        ColorRow(
+                            color = config.stripColor ?: Color.White,
+                            presets = emptyList(),
+                            onPreset = {},
+                            onPick = { colorTarget = ColorTarget.STRIP },
+                            onAuto = { config = config.copy(stripColor = null) },
+                            autoLabel = stringResource(R.string.widget_editor_strip_color_auto),
+                            showAuto = true,
+                        )
+                        HintText(stringResource(R.string.widget_editor_strip_hint))
                     }
                     ToggleRow(stringResource(R.string.widget_editor_show_source), config.showSource) {
                         config = config.copy(showSource = it)
@@ -641,6 +680,20 @@ private fun WidgetEditor(
             ColorTarget.BACKGROUND -> config.backgroundColor
             ColorTarget.CARD -> config.cardColor
             ColorTarget.TEXT -> config.textColor ?: Color.White
+            ColorTarget.STRIP -> config.stripColor ?: Color.White.copy(alpha = 0.3f)
+            is ColorTarget.METRIC ->
+                config.metricColors[target.key] ?: Color(target.metric.accent.toArgb())
+        }
+        val autoLabel = when (target) {
+            is ColorTarget.METRIC -> stringResource(R.string.widget_editor_metric_color_auto, target.metric.title)
+            ColorTarget.STRIP -> stringResource(R.string.widget_editor_strip_color_auto)
+            else -> stringResource(R.string.widget_editor_auto_color)
+        }
+        val onAuto: (() -> Unit)? = when (target) {
+            ColorTarget.TEXT -> { { config = config.copy(textColor = null) } }
+            ColorTarget.STRIP -> { { config = config.copy(stripColor = null) } }
+            is ColorTarget.METRIC -> { { config = config.copy(metricColors = config.metricColors - target.key) } }
+            else -> null
         }
         ColorPickerDialog(
             initial = initialColor,
@@ -655,9 +708,15 @@ private fun WidgetEditor(
                         cardOpacity = (picked.alpha * 100f).roundToInt().coerceIn(0, 100),
                     )
                     ColorTarget.TEXT -> config.copy(textColor = picked)
+                    ColorTarget.STRIP -> config.copy(stripColor = picked)
+                    is ColorTarget.METRIC -> config.copy(
+                        metricColors = config.metricColors + (target.key to picked),
+                    )
                 }
                 colorTarget = null
             },
+            autoLabel = autoLabel,
+            onAuto = onAuto?.let { handler -> { handler(); colorTarget = null } },
             onDismiss = { colorTarget = null },
         )
     }
@@ -1022,6 +1081,7 @@ private fun MetricRow(
     accent: Color,
     tapLabel: String,
     onSetApp: () -> Unit,
+    onSetColor: () -> Unit,
     onRemove: () -> Unit,
 ) {
     Row(
@@ -1032,11 +1092,21 @@ private fun MetricRow(
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(10.dp).clip(CircleShape).background(accent))
+        // The swatch doubles as the colour-customisation button for this metric.
+        Box(
+            Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .background(accent)
+                .clickable(onClick = onSetColor),
+        )
         Spacer(Modifier.size(12.dp))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             Text(tapLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        IconButton(onClick = onSetColor) {
+            Icon(Icons.Rounded.Palette, stringResource(R.string.widget_editor_metric_color))
         }
         OutlinedButton(onClick = onSetApp) { Text(stringResource(R.string.widget_editor_cell_tap)) }
         IconButton(onClick = onRemove) {

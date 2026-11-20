@@ -50,7 +50,14 @@ private val SWATCHES = listOf(
 
 /** HSV colour picker with a saturation/value field, hue and opacity sliders and hex input. */
 @Composable
-fun ColorPickerDialog(initial: Color, onColor: (Color) -> Unit, onDismiss: () -> Unit) {
+fun ColorPickerDialog(
+    initial: Color,
+    onColor: (Color) -> Unit,
+    onDismiss: () -> Unit,
+    /** Optional "back to automatic" action, shown as an extra dismiss-side button. */
+    autoLabel: String? = null,
+    onAuto: (() -> Unit)? = null,
+) {
     val hsv = remember(initial.toArgb()) {
         FloatArray(3).also { AndroidColor.colorToHSV(initial.toArgb(), it) }
     }
@@ -196,6 +203,9 @@ fun ColorPickerDialog(initial: Color, onColor: (Color) -> Unit, onDismiss: () ->
             TextButton(onClick = { onColor(current()) }) { Text(stringResource(R.string.action_done)) }
         },
         dismissButton = {
+            if (autoLabel != null && onAuto != null) {
+                TextButton(onClick = onAuto) { Text(autoLabel) }
+            }
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },
     )

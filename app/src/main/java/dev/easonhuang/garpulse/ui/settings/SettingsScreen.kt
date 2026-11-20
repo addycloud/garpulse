@@ -1,10 +1,14 @@
 package dev.easonhuang.garpulse.ui.settings
 
 import android.app.Activity
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +28,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.AcUnit
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.Download
@@ -35,6 +40,7 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.NetworkCheck
 import androidx.compose.material.icons.rounded.Straighten
+import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.ViewWeek
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -49,6 +55,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -108,6 +115,35 @@ private const val REPO_URL = "https://github.com/addycloud/garpulse"
 /** Persistent, on-screen outcome of the Garmin connection test. */
 private data class TestResult(val success: Boolean, val message: String)
 
+/** The three launcher-icon variants exposed as activity aliases in the manifest. */
+private enum class LauncherIcon(val component: String, @StringRes val labelRes: Int) {
+    DEFAULT("dev.easonhuang.garpulse.MainActivity", R.string.icon_default),
+    DARK("dev.easonhuang.garpulse.GarPulseIconDark", R.string.icon_dark),
+    LIGHT("dev.easonhuang.garpulse.GarPulseIconLight", R.string.icon_light),
+}
+
+/** The icon variant currently enabled for the launcher (aliases default to disabled). */
+private fun currentLauncherIcon(context: Context): LauncherIcon =
+    LauncherIcon.entries.firstOrNull { entry ->
+        context.packageManager.getComponentEnabledSetting(
+            ComponentName(context.packageName, entry.component),
+        ) == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+    } ?: LauncherIcon.DEFAULT
+
+/** Enables [icon]'s alias and disables the others; the home screen picks the change up shortly. */
+private fun applyLauncherIcon(context: Context, icon: LauncherIcon) {
+    val pm = context.packageManager
+    LauncherIcon.entries.forEach { entry ->
+        val component = ComponentName(context.packageName, entry.component)
+        val state = if (entry == icon) {
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        } else {
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+        }
+        runCatching { pm.setComponentEnabledSetting(component, state, PackageManager.DONT_KILL_APP) }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -130,6 +166,8 @@ fun SettingsScreen(
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showSourceDialog by remember { mutableStateOf(false) }
     var showColumnsDialog by remember { mutableStateOf(false) }
+    var showIconDialog by remember { mutableStateOf(false) }
+    val currentIcon = remember { currentLauncherIcon(context) }
     val overviewColumns by dashboardPrefs.columns.collectAsStateWithLifecycle(
         initialValue = DashboardPreferences.DEFAULT_COLUMNS,
     )
@@ -287,6 +325,37 @@ fun SettingsScreen(
                         subtitle = stringResource(R.string.settings_garmin_api_hint),
                         onClick = { showSourceDialog = true },
                     )
+                    if (selected == MetricSource.AUTO) {
+                        SettingsDivider()
+                        val garminPriority = sourceState?.garminPriority == true
+                        SettingRow(
+                            icon = Icons.Rounded.SwapVert,
+                            title = stringResource(R.string.settings_source_priority),
+                            subtitle = stringResource(
+                                if (garminPriority) R.string.settings_source_priority_garmin
+                                else R.string.settings_source_priority_hc,
+                            ),
+                            onClick = {
+                                scope.launch {
+                                    app.metricSource.setGarminPriority(!garminPriority)
+                                    app.garminMetrics.invalidate()
+                                    WidgetUpdateScheduler.refreshNow(context)
+                                }
+                            },
+                            trailing = {
+                                Switch(
+                                    checked = garminPriority,
+                                    onCheckedChange = {
+                                        scope.launch {
+                                            app.metricSource.setGarminPriority(it)
+                                            app.garminMetrics.invalidate()
+                                            WidgetUpdateScheduler.refreshNow(context)
+                                        }
+                                    },
+                                )
+                            },
+                        )
+                    }
 
                     if (selected != MetricSource.HEALTH_CONNECT) {
                         SettingsDivider()
@@ -395,6 +464,12 @@ fun SettingsScreen(
                         subtitle = stringResource(R.string.settings_language_summary),
                         onClick = { showLanguageDialog = true },
                     )
+                    SettingRow(
+                        icon = Icons.Rounded.AcUnit,
+                        title = stringResource(R.string.settings_app_icon),
+                        subtitle = stringResource(R.string.settings_app_icon_summary),
+                        onClick = { showIconDialog = true },
+                    )
                 }
             }
             item { SectionLabel(stringResource(R.string.settings_section_export)) }
@@ -469,6 +544,48 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showColumnsDialog = false }) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
+    }
+
+    if (showIconDialog) {
+        AlertDialog(
+            onDismissRequest = { showIconDialog = false },
+            title = { Text(stringResource(R.string.settings_app_icon)) },
+            text = {
+                Column(Modifier.selectableGroup()) {
+                    LauncherIcon.entries.forEach { option ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(MaterialTheme.shapes.medium)
+                                .selectable(
+                                    selected = option == currentIcon,
+                                    role = Role.RadioButton,
+                                    onClick = {
+                                        showIconDialog = false
+                                        if (option != currentIcon) {
+                                            applyLauncherIcon(context, option)
+                                            scope.launch {
+                                                snackbar.showSnackbar(
+                                                    resources.getString(R.string.settings_app_icon_applied),
+                                                )
+                                            }
+                                        }
+                                    },
+                                )
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = option == currentIcon, onClick = null)
+                            Spacer(Modifier.size(12.dp))
+                            Text(stringResource(option.labelRes), style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showIconDialog = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -744,7 +861,13 @@ private fun SettingsCard(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun SettingRow(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
+private fun SettingRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    trailing: (@Composable () -> Unit)? = null,
+) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -763,5 +886,6 @@ private fun SettingRow(icon: ImageVector, title: String, subtitle: String, onCli
             Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        trailing?.invoke()
     }
 }

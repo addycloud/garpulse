@@ -130,6 +130,13 @@ internal fun widgetTapAction(target: TapTarget, metricKey: String?) =
 internal fun WidgetConfig.textColorFor(metric: Metric?): Color =
     textColor ?: accentColor ?: metric?.accent ?: Color.White
 
+/**
+ * Colour for one metric cell: the per-metric override wins, then the global text colour,
+ * then the metric's own accent.
+ */
+internal fun WidgetConfig.colorFor(metricKey: String?, metric: Metric?): Color =
+    metricKey?.let { metricColors[it] } ?: textColorFor(metric)
+
 /** Emoji glyphs keep icon-only widgets useful without shipping 18 extra drawable assets. */
 internal fun metricGlyph(key: String): String = when (key) {
     "steps" -> "\uD83D\uDC63"          // shoe
@@ -232,21 +239,38 @@ internal fun ConfigurableWidgetContent() {
             }
         }
         if (config.showRefreshStrip) {
-            RefreshStrip(prefs.refreshFrame(), density, size.height.value)
+            RefreshStrip(config, prefs.refreshFrame(), density, size.width.value, size.height.value)
         }
     }
 }
 
 @Composable
-private fun RefreshStrip(frame: Int, density: Float, heightDp: Float) {
-    // Visible enough to read as one continuous line, a touch lighter while refreshing.
-    // Never a solid accent — it must stay quieter than the numbers it sits beside.
-    val alpha = 0.26f + (frame % 4) * 0.05f
+private fun RefreshStrip(
+    config: WidgetConfig,
+    frame: Int,
+    density: Float,
+    widthDp: Float,
+    heightDp: Float,
+) {
+    // Coverage 5..100% of the widget width, measured from the left edge. A custom colour keeps
+    // its own alpha (fully transparent = invisible, but the strip stays tappable). The default
+    // colour keeps the original animated translucent-white ribbon.
+    val coverage = config.stripCoverage.coerceIn(
+        WidgetConfig.MIN_STRIP_COVERAGE, WidgetConfig.MAX_STRIP_COVERAGE,
+    ) / 100f
+    val stripWidthDp = (widthDp * coverage).coerceAtLeast(2f)
+    val base = config.stripColor ?: Color.White
+    val alpha = if (config.stripColor != null) {
+        base.alpha
+    } else {
+        0.26f + (frame % 4) * 0.05f
+    }
     val bitmap = WidgetRefreshStrip.bitmap(
-        colorArgb = Color.White.copy(alpha = alpha).toArgb(),
-        widthPx = (12f * density).toInt().coerceAtLeast(6),
+        colorArgb = base.copy(alpha = alpha).toArgb(),
+        widthPx = (stripWidthDp * density).toInt().coerceAtLeast(6),
         heightPx = (heightDp * density).toInt().coerceAtLeast(8),
         phase = frame,
+        wave = config.stripWave.coerceIn(WidgetConfig.MIN_STRIP_WAVE, WidgetConfig.MAX_STRIP_WAVE),
     )
     Image(
         provider = ImageProvider(bitmap),
@@ -255,7 +279,7 @@ private fun RefreshStrip(frame: Int, density: Float, heightDp: Float) {
         // the bitmap's tall aspect ratio and shows only its middle slice — the "partial strip".
         contentScale = ContentScale.FillBounds,
         modifier = GlanceModifier
-            .width(6.dp)
+            .width(stripWidthDp.dp)
             .fillMaxHeight()
             .clickable(WidgetRefreshStrip.action()),
     )
@@ -316,7 +340,8 @@ private fun MetricCell(
     modifier: GlanceModifier,
 ) {
     val metric = Metric.fromKey(state.metricKey)
-    val accent = config.textColorFor(metric)
+    // Per-metric custom colour first, then the global text colour, then the metric accent.
+    val accent = config.colorFor(state.metricKey, metric)
     val compact = cell.heightDp < 96f || cell.widthDp < 120f
     val chartHeight = cell.heightDp * CHART_BACKDROP_RATIO
 
@@ -429,7 +454,7 @@ private fun IconGrid(
             Row(modifier = GlanceModifier.fillMaxWidth().defaultWeight(), verticalAlignment = Alignment.CenterVertically) {
                 row.forEach { cell ->
                     val state = states.getOrNull(cell.metricIndex) ?: return@forEach
-                    val color = config.textColorFor(Metric.fromKey(state.metricKey))
+                    val color = config.colorFor(state.metricKey, Metric.fromKey(state.metricKey))
                     Text(
                         text = metricGlyph(state.metricKey),
                         style = TextStyle(color = ColorProvider(color), fontSize = grid.bodySp.sp),

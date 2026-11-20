@@ -136,14 +136,17 @@ class HealthConnectManager(
         val local = readLocalDashboard(system)
         if (!useAuto()) return local
         // Mirrored mode: fill any metric the local source could not supply with the Garmin value.
-        // When both have data the local (synced Health Connect) reading stays authoritative.
+        // Which source wins when BOTH have data is user-configurable (source priority): by
+        // default the local (synced Health Connect) reading stays authoritative, but with
+        // Garmin priority enabled a fresh Garmin reading takes precedence whenever it has data.
+        val preferGarmin = sourcePrefs!!.state.first().garminPriority
         val remote = runCatching { garmin!!.readDashboard(system) }.getOrDefault(emptyList())
             .associateBy { it.metric }
         return local.map { l ->
             val g = remote[l.metric]
             when {
-                g != null && g.hasData && !l.hasData -> g
-                g != null && g.hasData && l.metric.garminOnly -> g
+                g != null && g.hasData && l.hasData -> if (preferGarmin) g else l
+                g != null && g.hasData -> g
                 else -> l
             }
         }
@@ -256,8 +259,12 @@ class HealthConnectManager(
         if (useGarmin()) return garmin!!.readDetail(metric, system)
         val local = readLocalDetail(metric, system)
         if (!useAuto()) return local
-        // Prefer whichever source actually has a headline. Ties keep the local reading.
+        // Prefer whichever source actually has a headline. With Garmin priority enabled a
+        // Garmin headline wins even when the local one exists.
         if (local.headline == "-") {
+            val remote = runCatching { garmin!!.readDetail(metric, system) }.getOrNull()
+            if (remote != null && remote.headline != "-") return remote
+        } else if (sourcePrefs!!.state.first().garminPriority) {
             val remote = runCatching { garmin!!.readDetail(metric, system) }.getOrNull()
             if (remote != null && remote.headline != "-") return remote
         }

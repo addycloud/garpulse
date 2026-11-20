@@ -58,6 +58,16 @@ android {
         }
     }
 
+    // Debug APK is always named garpulse-app-debug.apk regardless of version/branch.
+    applicationVariants.all {
+        outputs.all {
+            if (name == "debug") {
+                (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl)
+                    .outputFileName = "garpulse-app-debug.apk"
+            }
+        }
+    }
+
     // Reproducible builds: strip Google's signed (and nondeterministic) dependency-metadata
     // block from the APK. Also required for F-Droid reproducible-build verification.
     dependenciesInfo {

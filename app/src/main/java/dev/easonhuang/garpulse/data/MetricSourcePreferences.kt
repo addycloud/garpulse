@@ -2,6 +2,7 @@ package dev.easonhuang.garpulse.data
 
 import android.content.Context
 import androidx.annotation.StringRes
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -44,6 +45,8 @@ data class MetricSourceState(
     val tokenExpiresAt: Long = 0L,
     val lastSyncMillis: Long = 0L,
     val lastError: String = "",
+    /** Mirrored (AUTO) mode only: when both sources have data, prefer Garmin over Health Connect. */
+    val garminPriority: Boolean = false,
 ) {
     val hasKey: Boolean get() = apiKey.isNotBlank()
     val tokenUsable: Boolean
@@ -53,6 +56,7 @@ data class MetricSourceState(
 class MetricSourcePreferences(private val context: Context) {
 
     private val sourceKey = stringPreferencesKey("metric_source")
+    private val garminPriorityKey = booleanPreferencesKey("garmin_priority")
     private val apiKeyKey = stringPreferencesKey("garmin_api_key")
     private val tokenKey = stringPreferencesKey("garmin_bearer_token")
     private val tokenExpiryKey = longPreferencesKey("garmin_token_expires_at")
@@ -62,6 +66,7 @@ class MetricSourcePreferences(private val context: Context) {
     val state: Flow<MetricSourceState> = context.metricSourceDataStore.data.map { prefs ->
         MetricSourceState(
             source = MetricSource.fromKey(prefs[sourceKey]),
+            garminPriority = prefs[garminPriorityKey] ?: false,
             apiKey = prefs[apiKeyKey].orEmpty(),
             token = prefs[tokenKey].orEmpty(),
             tokenExpiresAt = prefs[tokenExpiryKey] ?: 0L,
@@ -72,6 +77,11 @@ class MetricSourcePreferences(private val context: Context) {
 
     suspend fun setSource(source: MetricSource) = context.metricSourceDataStore.edit { prefs ->
         prefs[sourceKey] = source.key
+    }
+
+    /** AUTO mode only: when both sources have data, which one wins (default: Health Connect). */
+    suspend fun setGarminPriority(preferGarmin: Boolean) = context.metricSourceDataStore.edit { prefs ->
+        prefs[garminPriorityKey] = preferGarmin
     }
 
     /** Changing the key invalidates any token issued for the previous key. */
