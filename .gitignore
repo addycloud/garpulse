@@ -1,0 +1,33 @@
+# Built output
+/build/
+/app/build/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Gradle
+.gradle/
+local.properties
+
+# Signing — never commit keys
+keystore.properties
+*.jks
+*.keystore
+
+# WorkBuddy project data (local assistant notes, not part of the app)
+.workbuddy/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Kotlin
+.kotlin/
+
+# IDE
+kls_database.db

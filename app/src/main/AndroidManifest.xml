@@ -1,0 +1,298 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- WorkManager (used only for the periodic widget-refresh worker) pulls in
+         ACCESS_NETWORK_STATE to support network-constrained jobs. Heartwood never sets a
+         network constraint and does no networking at all, so strip the permission to keep
+         the "nothing leaves your device" promise honest. See issue #1. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+
+    <!-- Only used when the user opts in to the Garmin Personal API data source. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Health Connect read permissions -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE_VARIABILITY" />
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_DISTANCE" />
+    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+    <uses-permission android:name="android.permission.health.READ_FLOORS_CLIMBED" />
+    <uses-permission android:name="android.permission.health.READ_WEIGHT" />
+    <uses-permission android:name="android.permission.health.READ_HEIGHT" />
+    <uses-permission android:name="android.permission.health.READ_BODY_FAT" />
+    <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION" />
+    <uses-permission android:name="android.permission.health.READ_RESPIRATORY_RATE" />
+    <uses-permission android:name="android.permission.health.READ_BLOOD_PRESSURE" />
+    <uses-permission android:name="android.permission.health.READ_BLOOD_GLUCOSE" />
+    <uses-permission android:name="android.permission.health.READ_HYDRATION" />
+    <uses-permission android:name="android.permission.health.READ_VO2_MAX" />
+    <uses-permission android:name="android.permission.health.READ_BASAL_METABOLIC_RATE" />
+
+    <!-- Lets the widgets and the periodic refresh worker read while in the background -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
+    <!-- Read data older than the default 30-day window (trends + export) -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
+
+    <!-- Needed so the app can find the Health Connect APK on Android 13 and lower -->
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+        <intent>
+            <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+        </intent>
+        <intent>
+            <action android:name="androidx.health.ACTION_HEALTH_CONNECT_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="androidx.health.ACTION_MANAGE_HEALTH_PERMISSIONS" />
+        </intent>
+        <!-- Widgets can launch a user-chosen app on tap (Android 11+ package visibility). -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".HeartwoodApp"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Heartwood">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.Heartwood.Splash">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Health Connect permissions rationale (Android 14+) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity>
+
+        <!-- Health Connect permissions rationale (Android 13 and lower) -->
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Full dashboard widget -->
+        <receiver
+            android:name=".widget.HeartwoodWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_dashboard_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/vitals_widget_info" />
+        </receiver>
+
+        <!-- Single configurable metric widget -->
+        <receiver
+            android:name=".widget.MetricWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_metric_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/metric_widget_info" />
+        </receiver>
+
+        <!-- Multi-metric preset widget -->
+        <receiver
+            android:name=".widget.MultiWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_multi_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/multi_widget_info" />
+        </receiver>
+
+        <!-- Icon-only preset widget -->
+        <receiver
+            android:name=".widget.IconWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_icons_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/icon_widget_info" />
+        </receiver>
+
+        <!-- Flexible-size variants (1x1 through 4x4), all sharing the configurable renderer -->
+        <receiver
+            android:name=".widget.Widget1x1Receiver"
+            android:exported="true"
+            android:label="@string/widget_sized_1x1_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_1x1" />
+        </receiver>
+        <receiver
+            android:name=".widget.Widget1x2Receiver"
+            android:exported="true"
+            android:label="@string/widget_sized_1x2_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_1x2" />
+        </receiver>
+        <receiver
+            android:name=".widget.Widget1x3Receiver"
+            android:exported="true"
+            android:label="@string/widget_sized_1x3_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_1x3" />
+        </receiver>
+        <receiver
+            android:name=".widget.Widget1x4Receiver"
+            android:exported="true"
+            android:label="@string/widget_sized_1x4_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_1x4" />
+        </receiver>
+        <receiver
+            android:name=".widget.Widget2x2Receiver"
+            android:exported="true"
+            android:label="@string/widget_sized_2x2_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_2x2" />
+        </receiver>
+        <receiver
+            android:name=".widget.Widget2x3Receiver"
+            android:exported="true"
+            android:label="@string/widget_sized_2x3_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_2x3" />
+        </receiver>
+        <receiver
+            android:name=".widget.Widget3x3Receiver"
+            android:exported="true"
+            android:label="@string/widget_sized_3x3_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_3x3" />
+        </receiver>
+        <receiver
+            android:name=".widget.Widget4x4Receiver"
+            android:exported="true"
+            android:label="@string/widget_sized_4x4_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_4x4" />
+        </receiver>
+        <receiver
+            android:name=".widget.Widget1x5Receiver"
+            android:exported="true"
+            android:label="@string/widget_sized_1x5_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_1x5" />
+        </receiver>
+        <receiver
+            android:name=".widget.Widget4x5Receiver"
+            android:exported="true"
+            android:label="@string/widget_sized_4x5_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_4x5" />
+        </receiver>
+
+        <!-- Single universal, freely-resizable widget used for every new add -->
+        <receiver
+            android:name=".widget.UniversalWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_universal_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/universal_widget_info" />
+        </receiver>
+
+        <!-- Applies an edited-first config to the widget id the launcher assigns on pin -->
+        <receiver
+            android:name=".widget.WidgetPinCallback"
+            android:exported="false" />
+
+        <!-- Quick Settings tiles (shade controls, like Wi-Fi / Bluetooth) -->
+        <service
+            android:name=".tile.HeartwoodTileService"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/quick_tile_name"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.TOGGLEABLE_TILE"
+                android:value="false" />
+        </service>
+
+        <service
+            android:name=".tile.RefreshTileService"
+            android:exported="true"
+            android:icon="@android:drawable/ic_popup_sync"
+            android:label="@string/quick_tile_refresh_name"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.TOGGLEABLE_TILE"
+                android:value="false" />
+        </service>
+
+        <activity
+            android:name=".widget.MetricWidgetConfigActivity"
+            android:exported="true"
+            android:label="@string/widget_metric_name"
+            android:theme="@style/Theme.Heartwood">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+    </application>
+</manifest>
