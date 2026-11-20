@@ -860,14 +860,15 @@ private fun AppPickerDialog(current: String?, onPick: (LauncherApp?) -> Unit, on
                         )
                     }
                     items(TapShortcuts.all) { shortcut ->
+                        val label = stringResource(TapShortcuts.labelOf(shortcut))
                         Row(
                             Modifier.fillMaxWidth().clickable {
-                                onPick(LauncherApp(shortcut, context.getString(TapShortcuts.labelOf(shortcut)), ""))
+                                onPick(LauncherApp(shortcut, label, ""))
                             }.padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             RadioButton(selected = current == shortcut, onClick = null)
-                            Text(stringResource(TapShortcuts.labelOf(shortcut)))
+                            Text(label)
                         }
                     }
                     if (tokens.size == 1 && filtered.none { it.packageName == query.trim() }) {
