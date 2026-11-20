@@ -34,6 +34,12 @@ object WidgetTapAction : ActionCallback {
         val uri = parameters[KEY_URI]?.takeIf { it.isNotBlank() }
         val metric = parameters[KEY_METRIC]?.takeIf { it.isNotBlank() }
 
+        // Built-in targets (@refresh/@overview/…) never open another app.
+        if (pkg != null && TapShortcuts.isShortcut(pkg)) {
+            TapShortcuts.launch(context, pkg, glanceId)
+            return
+        }
+
         val fallback = Intent(context, MainActivity::class.java).apply {
             putExtra(MainActivity.EXTRA_METRIC, metric)
         }
@@ -62,6 +68,54 @@ object WidgetTapAction : ActionCallback {
         }.getOrNull()
         if (resolved != null) return Intent().setComponent(resolved)
         return runCatching { pm.getLaunchIntentForPackage(pkg) }.getOrNull()
+    }
+}
+
+/**
+ * Built-in tap destinations stored as special "package" values starting with '@'. Besides third
+ * party apps, a metric can now jump to GarPulse's own screens or trigger a refresh.
+ */
+object TapShortcuts {
+    const val REFRESH = "@refresh"
+    const val OVERVIEW = "@overview"
+    const val INSIGHTS = "@insights"
+    const val WIDGETS = "@widgets"
+    const val SETTINGS = "@settings"
+
+    val all = listOf(REFRESH, OVERVIEW, INSIGHTS, WIDGETS, SETTINGS)
+
+    fun isShortcut(pkg: String): Boolean = pkg.startsWith("@")
+
+    fun labelOf(pkg: String): Int = when (pkg) {
+        REFRESH -> R.string.tap_shortcut_refresh
+        OVERVIEW -> R.string.tap_shortcut_overview
+        INSIGHTS -> R.string.tap_shortcut_insights
+        WIDGETS -> R.string.tap_shortcut_widgets
+        SETTINGS -> R.string.tap_shortcut_settings
+        else -> R.string.widget_tap_default
+    }
+
+    /** Executes the shortcut; [glanceId] lets the refresh target animate only this widget. */
+    suspend fun launch(context: Context, pkg: String, glanceId: GlanceId?) {
+        when (pkg) {
+            REFRESH -> WidgetRefreshStrip.performRefresh(context, glanceId)
+            OVERVIEW, INSIGHTS, WIDGETS, SETTINGS -> {
+                val intent = Intent(context, MainActivity::class.java).apply {
+                    putExtra(MainActivity.EXTRA_DEST, destRoute(pkg))
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                runCatching { context.startActivity(intent) }
+            }
+        }
+    }
+
+    /** Maps a shortcut to MainNav's internal route names. */
+    private fun destRoute(pkg: String): String = when (pkg) {
+        OVERVIEW -> "today"
+        INSIGHTS -> "summary"
+        WIDGETS -> "widgets"
+        SETTINGS -> "settings"
+        else -> "today"
     }
 }
 

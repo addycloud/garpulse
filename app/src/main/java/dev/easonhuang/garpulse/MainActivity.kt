@@ -22,6 +22,8 @@ class MainActivity : ComponentActivity() {
 
     // Deep-link target from a metric widget tap; consumed once navigation happens.
     private var deepLinkMetric by mutableStateOf<String?>(null)
+    // Built-in tab destination ('@overview' etc.) requested from a widget tap shortcut.
+    private var deepLinkDest by mutableStateOf<String?>(null)
 
     override fun attachBaseContext(newBase: android.content.Context) {
         super.attachBaseContext(LanguagePreferences(newBase).applyTo(newBase))
@@ -32,6 +34,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         deepLinkMetric = intent?.getStringExtra(EXTRA_METRIC)
+        deepLinkDest = intent?.getStringExtra(EXTRA_DEST)
         val app = application as GarPulseApp
         setContent {
             GarPulseTheme {
@@ -47,7 +50,8 @@ class MainActivity : ComponentActivity() {
                         units = app.units,
                         language = app.language,
                         deepLinkMetric = deepLinkMetric,
-                        onDeepLinkConsumed = { deepLinkMetric = null },
+                        deepLinkDest = deepLinkDest,
+                        onDeepLinkConsumed = { deepLinkMetric = null; deepLinkDest = null },
                     )
                 }
             }
@@ -65,9 +69,11 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         deepLinkMetric = intent.getStringExtra(EXTRA_METRIC)
+        deepLinkDest = intent.getStringExtra(EXTRA_DEST)
     }
 
     companion object {
         const val EXTRA_METRIC = "dev.easonhuang.garpulse.extra.METRIC"
+        const val EXTRA_DEST = "dev.easonhuang.garpulse.extra.DEST"
     }
 }

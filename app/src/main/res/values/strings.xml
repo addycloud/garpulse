@@ -223,6 +223,15 @@
     <string name="widget_editor_refresh_strip">Left refresh strip</string>
     <string name="widget_editor_tap">Open app on tap</string>
     <string name="widget_editor_search_app">Search apps</string>
+    <string name="tap_shortcut_header">Built-in destinations</string>
+    <string name="tap_shortcut_refresh">Refresh widget</string>
+    <string name="tap_shortcut_overview">Overview screen</string>
+    <string name="tap_shortcut_insights">Insights screen</string>
+    <string name="tap_shortcut_widgets">Widget manager</string>
+    <string name="tap_shortcut_settings">Settings screen</string>
+    <string name="dev_section">Developer</string>
+    <string name="dev_refresh_speed">Refresh wave speed: %1$.1f×</string>
+    <string name="dev_refresh_speed_hint">Multiplier on the refresh-strip wave animation (1× = original 90 ms/frame, default 5×).</string>
     <string name="widget_tap_default">GarPulse metric detail</string>
     <string name="widget_tap_reset">Reset</string>
 

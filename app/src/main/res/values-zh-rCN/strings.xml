@@ -211,6 +211,15 @@
     <string name="widget_editor_refresh_strip">左侧刷新条</string>
     <string name="widget_editor_tap">点按时打开应用</string>
     <string name="widget_editor_search_app">搜索应用</string>
+    <string name="tap_shortcut_header">内置跳转</string>
+    <string name="tap_shortcut_refresh">刷新小组件</string>
+    <string name="tap_shortcut_overview">概览页</string>
+    <string name="tap_shortcut_insights">总览页</string>
+    <string name="tap_shortcut_widgets">小组件管理</string>
+    <string name="tap_shortcut_settings">设置页</string>
+    <string name="dev_section">开发者</string>
+    <string name="dev_refresh_speed">刷新波浪动效速度：%1$.1f×</string>
+    <string name="dev_refresh_speed_hint">刷新条波浪动画速度倍率（1× 为原始 90 毫秒/帧，默认 5×）。</string>
     <string name="widget_tap_default">GarPulse 指标详情</string>
     <string name="widget_tap_reset">重置</string>
 

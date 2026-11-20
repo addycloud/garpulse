@@ -70,6 +70,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -254,6 +255,7 @@ private fun WidgetEditor(
     onPickImage: (Uri?) -> String?,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var config by remember { mutableStateOf(initial) }
     var showMetricPicker by remember { mutableStateOf(false) }
     var appPickerMetric by remember { mutableStateOf<String?>(null) }
@@ -340,6 +342,101 @@ private fun WidgetEditor(
                 }
             }
 
+            // ---- Picture -------------------------------------------------------------------
+            item {
+                EditorSection(
+                    icon = Icons.Rounded.Image,
+                    title = stringResource(R.string.widget_editor_image),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                config.imagePath?.let { stringResource(R.string.widget_editor_image_selected) }
+                                    ?: stringResource(R.string.widget_editor_image_none),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            HintText(
+                                config.imagePath?.let { stringResource(R.string.widget_editor_image_selected) }
+                                    ?: stringResource(R.string.widget_editor_preview_add_image),
+                            )
+                        }
+                        FilledTonalButton(onClick = { imageLauncher.launch("image/*") }) {
+                            Text(
+                                stringResource(
+                                    if (config.imagePath == null) R.string.widget_editor_add_image
+                                    else R.string.widget_editor_replace_image,
+                                ),
+                            )
+                        }
+                    }
+                    if (config.imagePath != null) {
+                        Spacer(Modifier.size(12.dp))
+                        SliderRow(
+                            label = stringResource(R.string.widget_editor_image_opacity, config.imageOpacity),
+                            value = config.imageOpacity.toFloat(),
+                            range = 0f..100f,
+                            steps = 9,
+                            onChange = { config = config.copy(imageOpacity = it.toInt()) },
+                        )
+                        Spacer(Modifier.size(4.dp))
+                        TextButton(onClick = {
+                            config.imagePath?.let(WidgetImageStore::delete)
+                            config = config.copy(imagePath = null)
+                        }) { Text(stringResource(R.string.action_remove)) }
+                    }
+                    Spacer(Modifier.size(6.dp))
+                    HintText(stringResource(R.string.widget_editor_image_hint))
+                }
+            }
+
+            // ---- Tap -----------------------------------------------------------------------
+            item {
+                EditorSection(
+                    icon = Icons.Rounded.Link,
+                    title = stringResource(R.string.widget_editor_tap),
+                ) {
+                    val pkg = config.tapActivity?.let { ComponentName.unflattenFromString(it)?.packageName }
+                        ?: config.tapPackage
+                    val tapActivity = config.tapActivity
+                    val label = when {
+                        config.tapUri?.isNotBlank() == true -> config.tapUri!!
+                        config.tapPackage != null && TapShortcuts.isShortcut(config.tapPackage!!) ->
+                            stringResource(TapShortcuts.labelOf(config.tapPackage!!))
+                        tapActivity != null -> stringResource(
+                            R.string.widget_editor_tap_page,
+                            appLabel(tapActivity.substringBefore('/')),
+                            tapActivity.substringAfterLast('.'),
+                        )
+                        pkg != null -> stringResource(R.string.widget_editor_tap_app, appLabel(pkg))
+                        else -> stringResource(R.string.widget_tap_default)
+                    }
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { showGlobalAppPicker = true }
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        IconButton(onClick = {
+                            if (config.tapPackage != null && TapShortcuts.isShortcut(config.tapPackage!!)) {
+                                scope.launch { TapShortcuts.launch(context, config.tapPackage!!, null) }
+                            } else {
+                                runCatching { testTapIntent(context, config)?.let(context::startActivity) }
+                            }
+                        }) { Icon(Icons.Rounded.Visibility, stringResource(R.string.widget_tap_test)) }
+                        IconButton(onClick = {
+                            config = config.copy(tapPackage = null, tapActivity = null, tapUri = null)
+                        }) {
+                            Icon(Icons.Rounded.Delete, stringResource(R.string.widget_tap_reset))
+                        }
+                    }
+                    Spacer(Modifier.size(8.dp))
+                    HintText(stringResource(R.string.widget_editor_tap_hint))
+                }
+            }
             // ---- Metrics -------------------------------------------------------------------
             item {
                 EditorSection(
@@ -356,6 +453,8 @@ private fun WidgetEditor(
                             ?: target.packageName
                         val tapLabel = when {
                             !target.uri.isNullOrBlank() -> target.uri!!
+                            target.packageName != null && TapShortcuts.isShortcut(target.packageName!!) ->
+                                stringResource(TapShortcuts.labelOf(target.packageName!!))
                             target.component != null -> stringResource(
                                 R.string.widget_editor_tap_page,
                                 appLabel(target.component.substringBefore('/')),
@@ -490,95 +589,6 @@ private fun WidgetEditor(
                 }
             }
 
-            // ---- Picture -------------------------------------------------------------------
-            item {
-                EditorSection(
-                    icon = Icons.Rounded.Image,
-                    title = stringResource(R.string.widget_editor_image),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                config.imagePath?.let { stringResource(R.string.widget_editor_image_selected) }
-                                    ?: stringResource(R.string.widget_editor_image_none),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            HintText(
-                                config.imagePath?.let { stringResource(R.string.widget_editor_image_selected) }
-                                    ?: stringResource(R.string.widget_editor_preview_add_image),
-                            )
-                        }
-                        FilledTonalButton(onClick = { imageLauncher.launch("image/*") }) {
-                            Text(
-                                stringResource(
-                                    if (config.imagePath == null) R.string.widget_editor_add_image
-                                    else R.string.widget_editor_replace_image,
-                                ),
-                            )
-                        }
-                    }
-                    if (config.imagePath != null) {
-                        Spacer(Modifier.size(12.dp))
-                        SliderRow(
-                            label = stringResource(R.string.widget_editor_image_opacity, config.imageOpacity),
-                            value = config.imageOpacity.toFloat(),
-                            range = 0f..100f,
-                            steps = 9,
-                            onChange = { config = config.copy(imageOpacity = it.toInt()) },
-                        )
-                        Spacer(Modifier.size(4.dp))
-                        TextButton(onClick = {
-                            config.imagePath?.let(WidgetImageStore::delete)
-                            config = config.copy(imagePath = null)
-                        }) { Text(stringResource(R.string.action_remove)) }
-                    }
-                    Spacer(Modifier.size(6.dp))
-                    HintText(stringResource(R.string.widget_editor_image_hint))
-                }
-            }
-
-            // ---- Tap -----------------------------------------------------------------------
-            item {
-                EditorSection(
-                    icon = Icons.Rounded.Link,
-                    title = stringResource(R.string.widget_editor_tap),
-                ) {
-                    val pkg = config.tapActivity?.let { ComponentName.unflattenFromString(it)?.packageName }
-                        ?: config.tapPackage
-                    val tapActivity = config.tapActivity
-                    val label = when {
-                        config.tapUri?.isNotBlank() == true -> config.tapUri!!
-                        tapActivity != null -> stringResource(
-                            R.string.widget_editor_tap_page,
-                            appLabel(tapActivity.substringBefore('/')),
-                            tapActivity.substringAfterLast('.'),
-                        )
-                        pkg != null -> stringResource(R.string.widget_editor_tap_app, appLabel(pkg))
-                        else -> stringResource(R.string.widget_tap_default)
-                    }
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { showGlobalAppPicker = true }
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                        IconButton(onClick = {
-                            runCatching { testTapIntent(context, config)?.let(context::startActivity) }
-                        }) { Icon(Icons.Rounded.Visibility, stringResource(R.string.widget_tap_test)) }
-                        IconButton(onClick = {
-                            config = config.copy(tapPackage = null, tapActivity = null, tapUri = null)
-                        }) {
-                            Icon(Icons.Rounded.Delete, stringResource(R.string.widget_tap_reset))
-                        }
-                    }
-                    Spacer(Modifier.size(8.dp))
-                    HintText(stringResource(R.string.widget_editor_tap_hint))
-                }
-            }
             item { Spacer(Modifier.height(24.dp)) }
         }
     }
@@ -838,6 +848,26 @@ private fun AppPickerDialog(current: String?, onPick: (LauncherApp?) -> Unit, on
                         ) {
                             RadioButton(selected = current == null, onClick = null)
                             Text(stringResource(R.string.widget_tap_default))
+                        }
+                    }
+                    // Built-in destinations: refresh or jump to one of GarPulse's own screens.
+                    item {
+                        Text(
+                            stringResource(R.string.tap_shortcut_header),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
+                        )
+                    }
+                    items(TapShortcuts.all) { shortcut ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable {
+                                onPick(LauncherApp(shortcut, context.getString(TapShortcuts.labelOf(shortcut)), ""))
+                            }.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = current == shortcut, onClick = null)
+                            Text(stringResource(TapShortcuts.labelOf(shortcut)))
                         }
                     }
                     if (tokens.size == 1 && filtered.none { it.packageName == query.trim() }) {

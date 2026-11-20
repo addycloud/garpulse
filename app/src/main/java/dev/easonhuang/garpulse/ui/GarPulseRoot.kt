@@ -74,6 +74,7 @@ fun GarPulseRoot(
     units: UnitPreferences,
     language: LanguagePreferences,
     deepLinkMetric: String? = null,
+    deepLinkDest: String? = null,
     onDeepLinkConsumed: () -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -185,6 +186,7 @@ fun GarPulseRoot(
             manager, goalsRepo, exporter, dashboardPrefs, units, language,
             onManagePermissions = ::manageAccess,
             deepLinkMetric = deepLinkMetric,
+            deepLinkDest = deepLinkDest,
             onDeepLinkConsumed = onDeepLinkConsumed,
         )
     }
@@ -206,6 +208,7 @@ private fun MainNav(
     language: LanguagePreferences,
     onManagePermissions: () -> Unit,
     deepLinkMetric: String? = null,
+    deepLinkDest: String? = null,
     onDeepLinkConsumed: () -> Unit = {},
 ) {
     val navController = rememberNavController()
@@ -219,6 +222,19 @@ private fun MainNav(
         val metric = deepLinkMetric?.let { Metric.fromKey(it) }
         if (metric != null) {
             navController.navigate("detail/${metric.key}")
+            onDeepLinkConsumed()
+        }
+    }
+
+    // Jump straight to a top-level tab when launched from a widget tap shortcut.
+    LaunchedEffect(deepLinkDest) {
+        val dest = deepLinkDest?.let { d -> Dest.entries.firstOrNull { it.route == d } }
+        if (dest != null) {
+            navController.navigate(dest.route) {
+                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
             onDeepLinkConsumed()
         }
     }

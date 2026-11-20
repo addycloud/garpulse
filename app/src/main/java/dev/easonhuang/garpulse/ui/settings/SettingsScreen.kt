@@ -104,6 +104,7 @@ import dev.easonhuang.garpulse.data.ExportFormat
 import dev.easonhuang.garpulse.data.ExportManager
 import dev.easonhuang.garpulse.data.AppLanguage
 import dev.easonhuang.garpulse.data.DashboardPreferences
+import dev.easonhuang.garpulse.data.DeveloperPreferences
 import dev.easonhuang.garpulse.data.HealthConnectManager
 import dev.easonhuang.garpulse.data.LanguagePreferences
 import dev.easonhuang.garpulse.data.Metric
@@ -214,6 +215,9 @@ fun SettingsScreen(
 
     val app = context.applicationContext as GarPulseApp
     val sourceState by app.metricSource.state.collectAsStateWithLifecycle(initialValue = null)
+    val devSpeedCollect by app.developerPrefs.refreshAnimSpeed.collectAsStateWithLifecycle(
+        initialValue = DeveloperPreferences.DEFAULT_SPEED,
+    )
     val hasSavedKey = sourceState?.hasKey == true
     // The key is never pre-filled into a visible field. Editing starts from blank; leaving the
     // field blank on save means "keep the current key", so its value is never echoed in the UI.
@@ -590,6 +594,34 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
                 )
+            }
+            item { SectionLabel(stringResource(R.string.dev_section)) }
+            item {
+                SettingsCard {
+                    // Developer tuning: refresh-strip wave animation speed (1×–10×).
+                    var devSpeed by remember(devSpeedCollect) { mutableStateOf(devSpeedCollect) }
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                        Text(
+                            stringResource(R.string.dev_refresh_speed, devSpeed),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Spacer(Modifier.size(8.dp))
+                        Slider(
+                            value = devSpeed,
+                            onValueChange = {
+                                devSpeed = it
+                                scope.launch { app.developerPrefs.setRefreshAnimSpeed(it) }
+                            },
+                            valueRange = DeveloperPreferences.MIN_SPEED..DeveloperPreferences.MAX_SPEED,
+                        )
+                        Text(
+                            stringResource(R.string.dev_refresh_speed_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
         }
     }

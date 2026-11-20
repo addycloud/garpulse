@@ -20,6 +20,9 @@ import androidx.glance.state.PreferencesGlanceStateDefinition
 import kotlin.math.PI
 import kotlin.math.sin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+
+import dev.easonhuang.garpulse.data.DeveloperPreferences
 
 /**
  * A slim wavy ribbon drawn on the left edge of a widget. Tapping it refreshes that widget only;
@@ -28,7 +31,50 @@ import kotlinx.coroutines.delay
  */
 internal object WidgetRefreshStrip {
     const val FRAME_COUNT = 4
-    const val FRAME_DELAY_MS = 90L
+
+    /** Delay per animation frame at 1× speed; the developer setting multiplies this. */
+    const val BASE_FRAME_DELAY_MS = 90L
+
+    /**
+     * Animates the wave and then asks the normal worker to re-read health data. Shared by the
+     * strip's own tap callback and the '@refresh' tap shortcut.
+     */
+    suspend fun performRefresh(context: Context, glanceId: GlanceId?) {
+        val app = context.applicationContext
+        if (glanceId == null) {
+            // No specific widget context (e.g. an '@refresh' tap with a null id): refresh all.
+            WidgetUpdateScheduler.refreshNow(app)
+            return
+        }
+        val appWidgetId = runCatching { GlanceAppWidgetManager(app).getAppWidgetId(glanceId) }.getOrNull()
+        val provider = appWidgetId?.let {
+            AppWidgetManager.getInstance(app).getAppWidgetInfo(it)?.provider
+        }
+        val widget = provider?.let { WidgetCatalog.widgetFor(it) }
+
+        // Speed multiplier from the developer settings; 1× = the original gentle wave.
+        val speed = DeveloperPreferences(app).refreshAnimSpeed.first()
+        val delayMs = (BASE_FRAME_DELAY_MS / speed).toLong().coerceAtLeast(8L)
+
+        setFrame(app, glanceId, 0)
+        widget?.update(app, glanceId)
+        repeat(FRAME_COUNT) { frame ->
+            delay(delayMs)
+            setFrame(app, glanceId, frame + 1)
+            widget?.update(app, glanceId)
+        }
+        setFrame(app, glanceId, 0)
+        widget?.update(app, glanceId)
+        WidgetUpdateScheduler.refreshNow(app)
+    }
+
+    private suspend fun setFrame(context: Context, glanceId: GlanceId, frame: Int) {
+        updateAppWidgetState(context, PreferencesGlanceStateDefinition, glanceId) { prefs ->
+            val mutable: MutablePreferences = prefs.toMutablePreferences()
+            mutable[WidgetPrefs.REFRESH_FRAME] = frame % FRAME_COUNT
+            mutable
+        }
+    }
 
     /**
      * Draws a single continuous ribbon spanning the widget's full height. A faint rounded rail
@@ -89,30 +135,7 @@ internal object WidgetRefreshStrip {
 /** Advances the wave for a few frames, then asks the normal worker to re-read health data. */
 object WidgetRefreshCallback : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val app = context.applicationContext
-        val appWidgetId = runCatching { GlanceAppWidgetManager(app).getAppWidgetId(glanceId) }.getOrNull()
-            ?: return
-        val provider = AppWidgetManager.getInstance(app).getAppWidgetInfo(appWidgetId)?.provider ?: return
-        val widget = WidgetCatalog.widgetFor(provider)
-
-        setFrame(app, glanceId, 0)
-        widget.update(app, glanceId)
-        repeat(WidgetRefreshStrip.FRAME_COUNT) { frame ->
-            delay(WidgetRefreshStrip.FRAME_DELAY_MS)
-            setFrame(app, glanceId, frame + 1)
-            widget.update(app, glanceId)
-        }
-        setFrame(app, glanceId, 0)
-        widget.update(app, glanceId)
-        WidgetUpdateScheduler.refreshNow(app)
-    }
-
-    private suspend fun setFrame(context: Context, glanceId: GlanceId, frame: Int) {
-        updateAppWidgetState(context, PreferencesGlanceStateDefinition, glanceId) { prefs ->
-            val mutable: MutablePreferences = prefs.toMutablePreferences()
-            mutable[WidgetPrefs.REFRESH_FRAME] = frame % WidgetRefreshStrip.FRAME_COUNT
-            mutable
-        }
+        WidgetRefreshStrip.performRefresh(context, glanceId)
     }
 }
 
