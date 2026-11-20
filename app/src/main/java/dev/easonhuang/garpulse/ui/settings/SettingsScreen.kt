@@ -131,9 +131,11 @@ private const val GARMIN_KEY_URL = "https://developer.garmin.com/garmin-connect-
 /** Persistent, on-screen outcome of the Garmin connection test. */
 private data class TestResult(val success: Boolean, val message: String)
 
-/** The three launcher-icon variants exposed as activity aliases in the manifest. */
+/** The three launcher-icon variants, each an activity alias carrying the LAUNCHER intent-filter.
+ *  The base [dev.easonhuang.garpulse.MainActivity] is never a launcher component and never
+ *  disabled, so explicit-component intents (widget taps, deep links) always keep working. */
 private enum class LauncherIcon(val component: String, @StringRes val labelRes: Int) {
-    DEFAULT("dev.easonhuang.garpulse.MainActivity", R.string.icon_default),
+    DEFAULT("dev.easonhuang.garpulse.GarPulseIconDefault", R.string.icon_default),
     DARK("dev.easonhuang.garpulse.GarPulseIconDark", R.string.icon_dark),
     LIGHT("dev.easonhuang.garpulse.GarPulseIconLight", R.string.icon_light),
 }

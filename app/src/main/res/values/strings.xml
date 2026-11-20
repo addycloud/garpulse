@@ -93,6 +93,8 @@
     <string name="detail_latest_at">Latest, %1$s</string>
     <string name="detail_latest_reading">Latest reading</string>
     <string name="detail_recent_records">Recent records</string>
+    <string name="detail_chart_bar">Bars</string>
+    <string name="detail_chart_line">Line</string>
     <string name="stat_daily_avg">Daily avg</string>
     <string name="stat_best_day">Best day</string>
     <string name="stat_14day_total">14-day total</string>

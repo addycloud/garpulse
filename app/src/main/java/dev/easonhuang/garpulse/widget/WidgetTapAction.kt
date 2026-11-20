@@ -82,7 +82,8 @@ object TapShortcuts {
     const val WIDGETS = "@widgets"
     const val SETTINGS = "@settings"
 
-    val all = listOf(REFRESH, OVERVIEW, INSIGHTS, WIDGETS, SETTINGS)
+    /** The list shown in the widget editor; @insights no longer has a destination page. */
+    val all = listOf(REFRESH, OVERVIEW, WIDGETS, SETTINGS)
 
     fun isShortcut(pkg: String): Boolean = pkg.startsWith("@")
 
@@ -109,10 +110,11 @@ object TapShortcuts {
         }
     }
 
-    /** Maps a shortcut to MainNav's internal route names. */
+    /** Maps a shortcut to MainNav's internal route names. The removed Insights tab falls back
+     *  to the Overview so a config saved before the tab's removal still opens something sane. */
     private fun destRoute(pkg: String): String = when (pkg) {
         OVERVIEW -> "today"
-        INSIGHTS -> "summary"
+        INSIGHTS -> "today"
         WIDGETS -> "widgets"
         SETTINGS -> "settings"
         else -> "today"

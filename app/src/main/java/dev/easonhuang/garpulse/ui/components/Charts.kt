@@ -171,6 +171,7 @@ fun LineChart(
     color: Color,
     modifier: Modifier = Modifier,
     format: (Float) -> String = { "%.0f".format(it) },
+    showDots: Boolean = false,
 ) {
     if (points.size < 2) {
         Box(modifier, contentAlignment = Alignment.Center) {
@@ -207,6 +208,15 @@ fun LineChart(
             fill.lineTo(size.width, size.height); fill.close()
             drawPath(fill, Brush.verticalGradient(listOf(color.copy(alpha = 0.25f), Color.Transparent)))
             drawPath(line, color, style = Stroke(width = 5f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            if (showDots) {
+                // A small dot per sample, so the exact value positions are readable at a glance.
+                points.forEachIndexed { i, p ->
+                    val x = i * stepX
+                    val y = size.height - ((p.value - min) / range) * size.height * 0.85f - size.height * 0.08f
+                    drawCircle(color, radius = 5f.dp.toPx(), center = Offset(x, y))
+                    drawCircle(Color.White, radius = 2.5f.dp.toPx(), center = Offset(x, y))
+                }
+            }
         }
         Spacer(Modifier.height(6.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

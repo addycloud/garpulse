@@ -28,6 +28,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -141,11 +144,52 @@ private fun ChartCard(d: MetricDetail) {
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
-        Box(Modifier.fillMaxWidth().height(220.dp).padding(20.dp)) {
-            if (d.metric.kind == MetricKind.DAILY_TOTAL) {
-                BarChart(d.points, d.metric.accent, Modifier.fillMaxSize())
-            } else {
-                LineChart(d.points, d.metric.accent, Modifier.fillMaxSize(), format = { d.metric.formatValue(it, d.system) })
+        Column(Modifier.fillMaxWidth().padding(20.dp)) {
+            // Bar or line, user's choice: the metric kind only picks the initial value.
+            var useLine by rememberSaveable(d.metric.key) {
+                androidx.compose.runtime.mutableStateOf(d.metric.kind != MetricKind.DAILY_TOTAL)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                androidx.compose.material3.FilterChip(
+                    selected = !useLine,
+                    onClick = { useLine = false },
+                    label = { Text(stringResource(R.string.detail_chart_bar)) },
+                )
+                Spacer(Modifier.size(8.dp))
+                androidx.compose.material3.FilterChip(
+                    selected = useLine,
+                    onClick = { useLine = true },
+                    label = { Text(stringResource(R.string.detail_chart_line)) },
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Box(Modifier.fillMaxWidth().height(220.dp)) {
+                if (useLine) {
+                    LineChart(
+                        d.points, d.metric.accent, Modifier.fillMaxSize(),
+                        format = { d.metric.formatValue(it, d.system) },
+                        showDots = true,
+                    )
+                } else {
+                    BarChart(d.points, d.metric.accent, Modifier.fillMaxSize())
+                }
+            }
+            // Concrete values, one small dot-column entry per sample, evenly spaced under the
+            // chart. Only shown when every value still fits without turning into ellipsis soup.
+            if (d.points.isNotEmpty() && d.points.size <= 14) {
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                    d.points.forEach { p ->
+                        Text(
+                            text = d.metric.formatValue(p.value, d.system),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = d.metric.accent,
+                            maxLines = 1,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
             }
         }
     }

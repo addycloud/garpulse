@@ -66,15 +66,14 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.GarPulse">
 
+        <!-- The base activity never carries the launcher intent-filter and is NEVER disabled:
+             widget taps, tap shortcuts and Health Connect's rationale alias all target it by
+             explicit component, and disabling it breaks every one of those entry points. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:theme="@style/Theme.GarPulse.Splash">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
             <!-- Health Connect permissions rationale (Android 14+) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
@@ -82,8 +81,23 @@
             </intent-filter>
         </activity>
 
-        <!-- Alternative launcher icons. Exactly one launcher component may be enabled at a
-             time; the in-app setting toggles these via PackageManager. -->
+        <!-- Launcher icons live ONLY in aliases (one per variant), so switching an icon never
+             disables the base activity. Exactly one alias is enabled at a time; the in-app
+             setting toggles these via PackageManager. -->
+        <activity-alias
+            android:name=".GarPulseIconDefault"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
         <activity-alias
             android:name=".GarPulseIconDark"
             android:enabled="false"

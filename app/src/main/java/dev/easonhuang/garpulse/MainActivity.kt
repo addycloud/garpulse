@@ -1,6 +1,8 @@
 package dev.easonhuang.garpulse
 
+import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,6 +35,7 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        healLauncherComponents()
         deepLinkMetric = intent?.getStringExtra(EXTRA_METRIC)
         deepLinkDest = intent?.getStringExtra(EXTRA_DEST)
         val app = application as GarPulseApp
@@ -44,7 +47,6 @@ class MainActivity : ComponentActivity() {
                 ) {
                     GarPulseRoot(
                         manager = app.healthConnect,
-                        goalsRepo = app.goals,
                         exporter = app.exporter,
                         dashboardPrefs = app.dashboardPrefs,
                         units = app.units,
@@ -54,6 +56,21 @@ class MainActivity : ComponentActivity() {
                         onDeepLinkConsumed = { deepLinkMetric = null; deepLinkDest = null },
                     )
                 }
+            }
+        }
+    }
+
+    /**
+     * One-time migration from the old icon-switch scheme, which disabled this activity itself
+     * (breaking every explicit-component intent: widget taps, Health Connect's rationale alias).
+     * Icons now live in aliases only; the base activity must always be at its manifest default.
+     */
+    private fun healLauncherComponents() {
+        val pm = packageManager
+        val base = ComponentName(this, "dev.easonhuang.garpulse.MainActivity")
+        if (pm.getComponentEnabledSetting(base) != PackageManager.COMPONENT_ENABLED_STATE_DEFAULT) {
+            runCatching {
+                pm.setComponentEnabledSetting(base, PackageManager.COMPONENT_ENABLED_STATE_DEFAULT, PackageManager.DONT_KILL_APP)
             }
         }
     }

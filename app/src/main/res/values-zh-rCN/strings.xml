@@ -90,6 +90,8 @@
     <string name="detail_latest_at">最新，%1$s</string>
     <string name="detail_latest_reading">最新读数</string>
     <string name="detail_recent_records">最近记录</string>
+    <string name="detail_chart_bar">柱状</string>
+    <string name="detail_chart_line">折线</string>
     <string name="stat_daily_avg">日平均</string>
     <string name="stat_best_day">最佳一天</string>
     <string name="stat_14day_total">14 日合计</string>

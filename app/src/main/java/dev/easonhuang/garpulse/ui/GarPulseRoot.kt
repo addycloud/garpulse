@@ -6,7 +6,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material.icons.rounded.Widgets
@@ -42,7 +41,6 @@ import androidx.navigation.compose.rememberNavController
 import dev.easonhuang.garpulse.data.DashboardPreferences
 import dev.easonhuang.garpulse.data.UnitPreferences
 import dev.easonhuang.garpulse.data.ExportManager
-import dev.easonhuang.garpulse.data.GoalsRepository
 import dev.easonhuang.garpulse.data.HealthConnectManager
 import dev.easonhuang.garpulse.data.LanguagePreferences
 import dev.easonhuang.garpulse.data.Metric
@@ -53,14 +51,12 @@ import dev.easonhuang.garpulse.ui.onboarding.LoadingScreen
 import dev.easonhuang.garpulse.ui.onboarding.OnboardingScreen
 import dev.easonhuang.garpulse.ui.onboarding.UnavailableScreen
 import dev.easonhuang.garpulse.ui.settings.SettingsScreen
-import dev.easonhuang.garpulse.ui.summary.SummaryScreen
 import dev.easonhuang.garpulse.ui.widgets.WidgetManagerScreen
 
 private const val HEALTH_CONNECT_PACKAGE = "com.google.android.apps.healthdata"
 
 private enum class Dest(val route: String, @StringRes val label: Int, val icon: ImageVector) {
     TODAY("today", R.string.nav_today, Icons.Rounded.Today),
-    SUMMARY("summary", R.string.nav_summary, Icons.Rounded.Insights),
     WIDGETS("widgets", R.string.nav_widgets, Icons.Rounded.Widgets),
     SETTINGS("settings", R.string.nav_settings, Icons.Rounded.Settings),
 }
@@ -68,7 +64,6 @@ private enum class Dest(val route: String, @StringRes val label: Int, val icon: 
 @Composable
 fun GarPulseRoot(
     manager: HealthConnectManager,
-    goalsRepo: GoalsRepository,
     exporter: ExportManager,
     dashboardPrefs: DashboardPreferences,
     units: UnitPreferences,
@@ -183,7 +178,7 @@ fun GarPulseRoot(
 
     val main: @Composable () -> Unit = {
         MainNav(
-            manager, goalsRepo, exporter, dashboardPrefs, units, language,
+            manager, exporter, dashboardPrefs, units, language,
             onManagePermissions = ::manageAccess,
             deepLinkMetric = deepLinkMetric,
             deepLinkDest = deepLinkDest,
@@ -201,7 +196,6 @@ fun GarPulseRoot(
 @Composable
 private fun MainNav(
     manager: HealthConnectManager,
-    goalsRepo: GoalsRepository,
     exporter: ExportManager,
     dashboardPrefs: DashboardPreferences,
     units: UnitPreferences,
@@ -277,9 +271,6 @@ private fun MainNav(
                     onOpenMetric = { metric -> navController.navigate("detail/${metric.key}") },
                     onManagePermissions = onManagePermissions,
                 )
-            }
-            composable(Dest.SUMMARY.route) {
-                SummaryScreen(manager = manager, goalsRepo = goalsRepo, units = units, bottomInset = bottomInset)
             }
             composable(Dest.SETTINGS.route) {
                 SettingsScreen(
