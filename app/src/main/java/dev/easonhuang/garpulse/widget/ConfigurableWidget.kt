@@ -216,25 +216,22 @@ internal fun ConfigurableWidgetContent() {
                     }
                 }
             } else {
+                // Layout follows the actual configuration: metric count and grid drive the
+                // planner, no manual single/multi/icon-only choice any more.
                 Row(
                     modifier = GlanceModifier.fillMaxSize().padding(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (config.layout == WidgetLayout.ICON_ONLY) {
-                        val grid = WidgetLayoutPlanner.iconGrid(size.width.value, size.height.value, states.size)
-                        IconGrid(GlanceModifier.fillMaxSize(), config, states, grid)
-                    } else {
-                        val longest = states.maxOfOrNull { it.value.length + it.unit.length } ?: 6
-                        val grid = WidgetLayoutPlanner.plan(
-                            widthDp = size.width.value,
-                            heightDp = size.height.value,
-                            metricCount = states.size.coerceAtLeast(1),
-                            fontScale = config.fontScale,
-                            showChart = config.showChart,
-                            valueChars = longest,
-                        )
-                        AdaptiveGrid(GlanceModifier.fillMaxSize(), config, states, grid, context, density)
-                    }
+                    val longest = states.maxOfOrNull { it.value.length + it.unit.length } ?: 6
+                    val grid = WidgetLayoutPlanner.plan(
+                        widthDp = size.width.value,
+                        heightDp = size.height.value,
+                        metricCount = states.size.coerceAtLeast(1),
+                        fontScale = config.fontScale,
+                        showChart = config.showChart,
+                        valueChars = longest,
+                    )
+                    AdaptiveGrid(GlanceModifier.fillMaxSize(), config, states, grid, context, density)
                 }
             }
         }

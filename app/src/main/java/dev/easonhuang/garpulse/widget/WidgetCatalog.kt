@@ -155,7 +155,6 @@ object WidgetCatalog {
         return listOfNotNull(
             sizeLabel(context, instance),
             metricNames.takeIf { it.isNotBlank() },
-            context.getString(config.layout.labelRes()),
         ).joinToString(" · ")
     }
 }

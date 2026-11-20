@@ -5,7 +5,13 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
@@ -34,6 +40,7 @@ import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.HealthAndSafety
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Lock
@@ -46,6 +53,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -112,6 +121,9 @@ import java.time.format.DateTimeFormatter
 
 private const val REPO_URL = "https://github.com/addycloud/garpulse"
 
+/** Where users create a Garmin Personal API key (consumer key/secret pair). */
+private const val GARMIN_KEY_URL = "https://developer.garmin.com/garmin-connect-api/"
+
 /** Persistent, on-screen outcome of the Garmin connection test. */
 private data class TestResult(val success: Boolean, val message: String)
 
@@ -129,7 +141,6 @@ private fun currentLauncherIcon(context: Context): LauncherIcon =
             ComponentName(context.packageName, entry.component),
         ) == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
     } ?: LauncherIcon.DEFAULT
-
 /** Enables [icon]'s alias and disables the others; the home screen picks the change up shortly. */
 private fun applyLauncherIcon(context: Context, icon: LauncherIcon) {
     val pm = context.packageManager
@@ -142,6 +153,20 @@ private fun applyLauncherIcon(context: Context, icon: LauncherIcon) {
         }
         runCatching { pm.setComponentEnabledSetting(component, state, PackageManager.DONT_KILL_APP) }
     }
+}
+
+/** Decodes [uri] and pins a home-screen shortcut to GarPulse carrying the image as its icon. */
+private suspend fun pinCustomIconShortcut(context: Context, uri: Uri): Boolean = withContext(Dispatchers.IO) {
+    val resolver = context.contentResolver
+    val bitmap = resolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it) }
+        ?: return@withContext false
+    val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return@withContext false
+    val shortcut = ShortcutInfoCompat.Builder(context, "custom_icon_${System.currentTimeMillis()}")
+        .setShortLabel(context.getString(R.string.app_name))
+        .setIcon(IconCompat.createWithBitmap(bitmap))
+        .setIntent(launch)
+        .build()
+    ShortcutManagerCompat.requestPinShortcut(context, shortcut, null)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -168,6 +193,20 @@ fun SettingsScreen(
     var showColumnsDialog by remember { mutableStateOf(false) }
     var showIconDialog by remember { mutableStateOf(false) }
     val currentIcon = remember { currentLauncherIcon(context) }
+
+    // Picking an arbitrary image cannot change the launcher's app icon directly (Android only
+    // allows static manifest icons), so the custom option pins a home-screen shortcut that
+    // opens GarPulse and carries the chosen image as its icon.
+    val customIconLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val ok = runCatching { pinCustomIconShortcut(context, uri) }.isSuccess
+                snackbar.showSnackbar(
+                    resources.getString(if (ok) R.string.icon_custom_applied else R.string.icon_custom_failed),
+                )
+            }
+        }
+    }
     val overviewColumns by dashboardPrefs.columns.collectAsStateWithLifecycle(
         initialValue = DashboardPreferences.DEFAULT_COLUMNS,
     )
@@ -328,6 +367,23 @@ fun SettingsScreen(
                     if (selected == MetricSource.AUTO) {
                         SettingsDivider()
                         val garminPriority = sourceState?.garminPriority == true
+                        var priorityMenu by remember { mutableStateOf(false) }
+
+                        // Switching priority must take effect everywhere at once: the in-app
+                        // dashboard re-reads via the invalidated repository, the widgets refresh
+                        // immediately, and the user gets a visible confirmation.
+                        suspend fun applyPriority(garminFirst: Boolean) {
+                            app.metricSource.setGarminPriority(garminFirst)
+                            app.garminMetrics.invalidate()
+                            WidgetUpdateScheduler.refreshNow(context)
+                            snackbar.showSnackbar(
+                                resources.getString(
+                                    if (garminFirst) R.string.settings_source_priority_garmin
+                                    else R.string.settings_source_priority_hc,
+                                ),
+                            )
+                        }
+
                         SettingRow(
                             icon = Icons.Rounded.SwapVert,
                             title = stringResource(R.string.settings_source_priority),
@@ -335,24 +391,37 @@ fun SettingsScreen(
                                 if (garminPriority) R.string.settings_source_priority_garmin
                                 else R.string.settings_source_priority_hc,
                             ),
-                            onClick = {
-                                scope.launch {
-                                    app.metricSource.setGarminPriority(!garminPriority)
-                                    app.garminMetrics.invalidate()
-                                    WidgetUpdateScheduler.refreshNow(context)
-                                }
-                            },
+                            onClick = { priorityMenu = true },
                             trailing = {
-                                Switch(
-                                    checked = garminPriority,
-                                    onCheckedChange = {
-                                        scope.launch {
-                                            app.metricSource.setGarminPriority(it)
-                                            app.garminMetrics.invalidate()
-                                            WidgetUpdateScheduler.refreshNow(context)
-                                        }
-                                    },
-                                )
+                                Box {
+                                    Text(
+                                        stringResource(
+                                            if (garminPriority) R.string.priority_garmin
+                                            else R.string.priority_hc,
+                                        ),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                    DropdownMenu(
+                                        expanded = priorityMenu,
+                                        onDismissRequest = { priorityMenu = false },
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.priority_garmin)) },
+                                            onClick = {
+                                                priorityMenu = false
+                                                scope.launch { applyPriority(true) }
+                                            },
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.priority_hc)) },
+                                            onClick = {
+                                                priorityMenu = false
+                                                scope.launch { applyPriority(false) }
+                                            },
+                                        )
+                                    }
+                                }
                             },
                         )
                     }
@@ -362,6 +431,16 @@ fun SettingsScreen(
                         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                             SectionCaption(stringResource(R.string.settings_garmin_api))
                             Spacer(Modifier.size(10.dp))
+
+                            // Direct jump to the page where the personal key is issued.
+                            TextButton(onClick = {
+                                runCatching {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GARMIN_KEY_URL)))
+                                }
+                            }) {
+                                Text(stringResource(R.string.garmin_api_key_link))
+                            }
+                            Spacer(Modifier.size(6.dp))
 
                             if (hasSavedKey && !editingKey) {
                                 // Key is stored but never displayed. Only an explicit action reveals
@@ -580,6 +659,36 @@ fun SettingsScreen(
                             RadioButton(selected = option == currentIcon, onClick = null)
                             Spacer(Modifier.size(12.dp))
                             Text(stringResource(option.labelRes), style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+
+                    SettingsDivider()
+                    // Custom image: pins a home-screen shortcut with the picked picture as icon.
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.medium)
+                            .selectable(selected = false, role = Role.Button, onClick = {
+                                showIconDialog = false
+                                customIconLauncher.launch("image/*")
+                            })
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Rounded.Image,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Spacer(Modifier.size(12.dp))
+                        Column {
+                            Text(stringResource(R.string.icon_custom), style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                stringResource(R.string.icon_custom_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 }

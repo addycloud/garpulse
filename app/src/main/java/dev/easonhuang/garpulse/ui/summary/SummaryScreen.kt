@@ -56,6 +56,7 @@ import dev.easonhuang.garpulse.data.GoalsRepository
 import dev.easonhuang.garpulse.data.HealthConnectManager
 import dev.easonhuang.garpulse.data.WeeklyStat
 import dev.easonhuang.garpulse.data.UnitPreferences
+import dev.easonhuang.garpulse.data.ValueSource
 import dev.easonhuang.garpulse.data.formatValue
 import dev.easonhuang.garpulse.data.title
 import dev.easonhuang.garpulse.data.unit
@@ -132,34 +133,70 @@ private fun WeeklyCard(stat: WeeklyStat, onEdit: () -> Unit) {
     ) {
         Column(Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                GoalRing(progress = stat.progress, color = accent) {
-                    Text(
-                        "${(stat.progress * 100).roundToInt()}%",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
+                if (stat.goal > 0f) {
+                    GoalRing(progress = stat.progress, color = accent) {
+                        Text(
+                            "${(stat.progress * 100).roundToInt()}%",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                } else {
+                    // Goal-less metrics (latest-style readings) show their icon instead of an empty ring.
+                    Box(
+                        Modifier.size(48.dp).clip(RoundedCornerShape(50)).background(accent.copy(alpha = 0.16f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(stat.metric.icon, null, tint = accent, modifier = Modifier.size(22.dp))
+                    }
                 }
                 Spacer(Modifier.size(16.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(stat.metric.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        stringResource(
-                            R.string.summary_progress,
-                            stat.metric.formatValue(stat.thisWeekAvg, stat.system),
-                            stat.metric.formatValue(stat.goal, stat.system),
-                            stat.metric.unit(stat.system),
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    DeltaChip(stat)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(stat.metric.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.size(8.dp))
+                        SourceChip(stat.source)
+                    }
+                    if (stat.thisWeekAvg > 0f || stat.perDay.isNotEmpty()) {
+                        Text(
+                            stringResource(
+                                R.string.summary_progress,
+                                stat.metric.formatValue(stat.thisWeekAvg, stat.system),
+                                stat.metric.formatValue(stat.goal, stat.system),
+                                stat.metric.unit(stat.system),
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        DeltaChip(stat)
+                    } else {
+                        Text(
+                            stringResource(R.string.summary_no_data),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.summary_edit_goal), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                IconButton(onClick = onEdit, enabled = stat.goal > 0f) {
+                    Icon(
+                        Icons.Rounded.Edit,
+                        contentDescription = stringResource(R.string.summary_edit_goal),
+                        tint = if (stat.goal > 0f) MaterialTheme.colorScheme.onSurfaceVariant
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                    )
                 }
             }
             Spacer(Modifier.height(16.dp))
+            if (stat.perDay.isEmpty()) {
+                Text(
+                    stringResource(R.string.summary_no_series),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+            } else {
             val days = stat.perDay.size
             val daysMet = stat.perDay.count { it.value >= stat.goal }
             val chartDescription = if (stat.goal > 0f) {
@@ -208,7 +245,30 @@ private fun WeeklyCard(stat: WeeklyStat, onEdit: () -> Unit) {
                     }
                 }
             }
+            }
         }
+    }
+}
+
+/** Small colour-coded tag naming the source that supplied this metric. */
+@Composable
+private fun SourceChip(source: ValueSource) {
+    val tint = source.badgeColor
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(50))
+            .background(tint.copy(alpha = 0.14f))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(6.dp).clip(RoundedCornerShape(50)).background(tint))
+        Spacer(Modifier.size(4.dp))
+        Text(
+            stringResource(source.shortRes),
+            style = MaterialTheme.typography.labelSmall,
+            color = tint,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 

@@ -1,6 +1,6 @@
 package dev.easonhuang.garpulse.data
 
-/** This-week vs last-week comparison for a goal-capable metric. */
+/** This-week vs last-week comparison for one metric on the Insights screen. */
 data class WeeklyStat(
     val metric: Metric,
     val perDay: List<SeriesPoint>,   // last 7 days, oldest → newest
@@ -8,6 +8,8 @@ data class WeeklyStat(
     val lastWeekAvg: Float,
     val goal: Float,
     val system: UnitSystem = UnitSystem.METRIC,  // perDay, averages and goal are all in this
+    /** Which source supplied this metric under the current mode/priority. */
+    val source: ValueSource = ValueSource.HEALTH_CONNECT,
 ) {
     /** 0f..1f progress of this week's daily average toward the goal. */
     val progress: Float get() = if (goal > 0f) (thisWeekAvg / goal).coerceIn(0f, 1f) else 0f

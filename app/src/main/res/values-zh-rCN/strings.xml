@@ -124,6 +124,9 @@
     <string name="trend_up">较上周 +%1$d%%</string>
     <string name="trend_down">较上周 %1$d%%</string>
     <string name="trend_steady">与上周持平</string>
+    <string name="summary_no_data">还没有记录到数据</string>
+    <string name="summary_no_series">当前数据源下该指标暂无每日历史数据</string>
+    <string name="garmin_api_key_link">如何获取 Personal API Key ↗</string>
     <string name="summary_empty_title">还没有目标数据</string>
     <string name="summary_empty_body">授权步数、能量、距离、运动、饮水量或爬楼层数后即可查看每周进度。</string>
     <string name="goal_dialog_title">%1$s 目标</string>
@@ -143,6 +146,10 @@
     <string name="settings_app_icon">应用图标</string>
     <string name="settings_app_icon_summary">选择桌面图标样式</string>
     <string name="settings_app_icon_applied">图标已更换，稍候会出现在桌面上。</string>
+    <string name="icon_custom">自定义图片…</string>
+    <string name="icon_custom_hint">用你选择的图片在桌面创建一个打开 GarPulse 的快捷方式</string>
+    <string name="icon_custom_applied">快捷方式已固定到桌面。</string>
+    <string name="icon_custom_failed">快捷方式创建失败。</string>
     <string name="icon_default">GarPulse（渐变）</string>
     <string name="icon_dark">暗色</string>
     <string name="icon_light">亮色</string>
@@ -333,6 +340,8 @@
     <string name="source_health_connect_desc">仅从健康同步读取数据</string>
     <string name="source_auto_desc">同时读取两个来源 — 每张卡片显示有数据的那个来源，并用颜色标签区分</string>
     <string name="source_garmin_api_desc">仅通过你的佳明密钥读取</string>
+    <string name="priority_garmin">佳明优先</string>
+    <string name="priority_hc">Health Connect 优先</string>
     <string name="settings_source_priority">数据源优先级</string>
     <string name="settings_source_priority_garmin">两个来源都有数据时优先取 Garmin</string>
     <string name="settings_source_priority_hc">两个来源都有数据时优先取 Health Connect</string>

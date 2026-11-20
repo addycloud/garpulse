@@ -132,6 +132,9 @@
     <string name="trend_up">+%1$d%% vs last week</string>
     <string name="trend_down">%1$d%% vs last week</string>
     <string name="trend_steady">Steady vs last week</string>
+    <string name="summary_no_data">No data recorded yet</string>
+    <string name="summary_no_series">No daily history for this metric in the current data source</string>
+    <string name="garmin_api_key_link">How to get a Personal API Key ↗</string>
     <string name="summary_empty_title">No goal-tracked data yet</string>
     <string name="summary_empty_body">Grant access to steps, energy, distance, exercise, hydration or floors to see weekly progress.</string>
     <string name="goal_dialog_title">%1$s goal</string>
@@ -151,6 +154,10 @@
     <string name="settings_app_icon">App icon</string>
     <string name="settings_app_icon_summary">Choose the launcher icon style</string>
     <string name="settings_app_icon_applied">Icon changed — it may take a moment to appear on your home screen.</string>
+    <string name="icon_custom">Custom image…</string>
+    <string name="icon_custom_hint">Pin a home-screen shortcut with your own picture as the icon</string>
+    <string name="icon_custom_applied">Shortcut pinned to your home screen.</string>
+    <string name="icon_custom_failed">Could not create the shortcut.</string>
     <string name="icon_default">GarPulse (gradient)</string>
     <string name="icon_dark">Dark</string>
     <string name="icon_light">Light</string>
@@ -345,6 +352,8 @@
     <string name="source_health_connect_desc">Read only from Health Connect</string>
     <string name="source_auto_desc">Read from both at once — each tile shows whichever source has data, labelled by colour</string>
     <string name="source_garmin_api_desc">Read only from your Garmin Personal API key</string>
+    <string name="priority_garmin">Garmin first</string>
+    <string name="priority_hc">Health Connect first</string>
     <string name="settings_source_priority">Source priority</string>
     <string name="settings_source_priority_garmin">Garmin first when both sources have data</string>
     <string name="settings_source_priority_hc">Health Connect first when both sources have data</string>

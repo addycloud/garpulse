@@ -129,6 +129,22 @@ class HealthConnectManager(
         sourcePrefs != null && garmin != null && garmin.configured() &&
             sourcePrefs.state.first().source == MetricSource.AUTO
 
+    /** Which source actually supplies [metric]'s series under the current mode and priority. */
+    suspend fun sourceFor(metric: Metric, system: UnitSystem = UnitSystem.METRIC): ValueSource = when {
+        useGarmin() -> ValueSource.GARMIN_API
+        !useAuto() -> ValueSource.HEALTH_CONNECT
+        // Mirrored AUTO mode: whatever the local source cannot supply comes from Garmin.
+        metric.garminOnly -> ValueSource.GARMIN_API
+        else -> when (metric.kind) {
+            MetricKind.DAILY_TOTAL ->
+                if (runCatching { series(metric, 2, system) }.getOrDefault(emptyList()).isEmpty())
+                    ValueSource.GARMIN_API else ValueSource.HEALTH_CONNECT
+            MetricKind.LATEST ->
+                if (runCatching { readLocalDetail(metric, system) }.getOrNull()?.headline != "-")
+                    ValueSource.HEALTH_CONNECT else ValueSource.GARMIN_API
+        }
+    }
+
     // ---- Dashboard -----------------------------------------------------------------------------
 
     suspend fun readDashboard(system: UnitSystem = UnitSystem.METRIC): List<MetricSummary> {

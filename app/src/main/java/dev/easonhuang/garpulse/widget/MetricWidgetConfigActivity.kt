@@ -340,26 +340,6 @@ private fun WidgetEditor(
                 }
             }
 
-            // ---- Layout --------------------------------------------------------------------
-            item {
-                EditorSection(
-                    icon = Icons.Rounded.GridView,
-                    title = stringResource(R.string.widget_editor_layout),
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        WidgetLayout.entries.forEach { layout ->
-                            FilterChip(
-                                selected = config.layout == layout,
-                                onClick = { config = config.copy(layout = layout) },
-                                label = { Text(stringResource(layout.labelRes())) },
-                            )
-                        }
-                    }
-                    Spacer(Modifier.size(10.dp))
-                    HintText(stringResource(R.string.widget_editor_layout_hint))
-                }
-            }
-
             // ---- Metrics -------------------------------------------------------------------
             item {
                 EditorSection(

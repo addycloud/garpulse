@@ -76,10 +76,10 @@ class DashboardViewModel(
         viewModelScope.launch { units.system.collect { load(it) } }
         if (sourcePrefs != null) {
             viewModelScope.launch {
-                // Only re-read when the source or key presence actually changes, not on every
-                // sync-status write (which would otherwise cause a refresh loop).
+                // Only re-read when the source, key presence OR priority actually changes, not
+                // on every sync-status write (which would otherwise cause a refresh loop).
                 sourcePrefs.state
-                    .map { it.source to it.hasKey }
+                    .map { Triple(it.source, it.hasKey, it.garminPriority) }
                     .distinctUntilChanged()
                     .drop(1)
                     .collect { load(units.system.first()) }

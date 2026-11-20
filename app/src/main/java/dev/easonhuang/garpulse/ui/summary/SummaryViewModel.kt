@@ -11,6 +11,7 @@ import dev.easonhuang.garpulse.data.Metric
 import dev.easonhuang.garpulse.data.SeriesPoint
 import dev.easonhuang.garpulse.data.UnitPreferences
 import dev.easonhuang.garpulse.data.UnitSystem
+import dev.easonhuang.garpulse.data.ValueSource
 import dev.easonhuang.garpulse.data.WeeklyStat
 import dev.easonhuang.garpulse.data.fromBase
 import dev.easonhuang.garpulse.data.toBase
@@ -38,25 +39,31 @@ class SummaryViewModel(
     // Null until first load completes.
     private val series = MutableStateFlow<LoadedSeries?>(null)
 
+    /** Per-metric source labels, refreshed alongside the series. */
+    private var sourceCache: Map<Metric, ValueSource> = emptyMap()
+
     val state = combine(series, goalsRepo.goals) { loaded, goals ->
         if (loaded == null) {
             SummaryState(loading = true)
         } else {
             val system = loaded.system
-            val stats = GoalCatalog.metrics.mapNotNull { metric ->
+            // Every metric the Overview can show, not just goal-capable ones. Metrics without
+            // any data (no permission / nothing recorded) still get a card so the Insights
+            // screen mirrors the Overview's full set.
+            val stats = Metric.entries.map { metric ->
                 val pts = loaded.byMetric[metric]
-                if (pts.isNullOrEmpty()) return@mapNotNull null
-                val thisWeek = pts.takeLast(7)
-                val lastWeek = pts.dropLast(7).takeLast(7)
+                val thisWeek = pts.orEmpty().takeLast(7)
+                val lastWeek = pts.orEmpty().dropLast(7).takeLast(7)
                 // Goals are stored metric; show them in the same units as the series.
-                val goal = goals[metric] ?: GoalCatalog.defaults.getValue(metric)
+                val goalBase = goals[metric] ?: GoalCatalog.defaults[metric] ?: 0f
                 WeeklyStat(
                     metric = metric,
                     perDay = thisWeek,
-                    thisWeekAvg = thisWeek.map { it.value }.average().toFloat(),
+                    thisWeekAvg = if (thisWeek.isEmpty()) 0f else thisWeek.map { it.value }.average().toFloat(),
                     lastWeekAvg = if (lastWeek.isEmpty()) 0f else lastWeek.map { it.value }.average().toFloat(),
-                    goal = metric.fromBase(goal, system),
+                    goal = metric.fromBase(goalBase, system),
                     system = system,
+                    source = sourceCache[metric] ?: ValueSource.HEALTH_CONNECT,
                 )
             }
             SummaryState(loading = false, stats = stats)
@@ -72,12 +79,13 @@ class SummaryViewModel(
 
     private suspend fun load(system: UnitSystem) {
         val granted = runCatching { manager.grantedPermissions() }.getOrDefault(emptySet())
-        series.value = LoadedSeries(
-            system,
-            GoalCatalog.metrics
-                .filter { manager.permissionFor(it) in granted }
-                .associateWith { runCatching { manager.readDailySeries(it, 14, system) }.getOrDefault(emptyList()) },
-        )
+        val byMetric = Metric.entries
+            .filter { manager.permissionFor(it) in granted }
+            .associateWith { runCatching { manager.readDailySeries(it, 14, system) }.getOrDefault(emptyList()) }
+        sourceCache = Metric.entries.associateWith { metric ->
+            runCatching { manager.sourceFor(metric, system) }.getOrDefault(ValueSource.HEALTH_CONNECT)
+        }
+        series.value = LoadedSeries(system, byMetric)
     }
 
     /** [value] is in [system]'s unit, as typed into the goal dialog. */
