@@ -98,12 +98,14 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- The Dark/Light alias names are kept for compatibility with installs that had
+             already enabled them; both now carry two of the selectable logo directions. -->
         <activity-alias
             android:name=".GarPulseIconDark"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_dark"
-            android:roundIcon="@mipmap/ic_launcher_dark_round"
+            android:icon="@mipmap/ic_launcher_heart"
+            android:roundIcon="@mipmap/ic_launcher_heart_round"
             android:label="@string/app_name"
             android:targetActivity=".MainActivity">
             <intent-filter>
@@ -116,8 +118,50 @@
             android:name=".GarPulseIconLight"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_light"
-            android:roundIcon="@mipmap/ic_launcher_light_round"
+            android:icon="@mipmap/ic_launcher_ribbon"
+            android:roundIcon="@mipmap/ic_launcher_ribbon_round"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".GarPulseIconWatch"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_watch"
+            android:roundIcon="@mipmap/ic_launcher_watch_round"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".GarPulseIconStopwatch"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_stopwatch"
+            android:roundIcon="@mipmap/ic_launcher_stopwatch_round"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".GarPulseIconDiamond"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_diamond"
+            android:roundIcon="@mipmap/ic_launcher_diamond_round"
             android:label="@string/app_name"
             android:targetActivity=".MainActivity">
             <intent-filter>

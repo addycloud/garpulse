@@ -153,16 +153,16 @@
     <string name="settings_export_summary">Save your accessible data to a file (CSV or JSON)</string>
     <string name="settings_section_display">Display</string>
     <string name="settings_section_export">Export</string>
-    <string name="settings_app_icon">App icon</string>
-    <string name="settings_app_icon_summary">Choose the launcher icon style</string>
-    <string name="settings_app_icon_applied">Icon changed — it may take a moment to appear on your home screen.</string>
-    <string name="icon_custom">Custom image…</string>
-    <string name="icon_custom_hint">Pin a home-screen shortcut with your own picture as the icon</string>
-    <string name="icon_custom_applied">Shortcut pinned to your home screen.</string>
-    <string name="icon_custom_failed">Could not create the shortcut.</string>
-    <string name="icon_default">GarPulse (gradient)</string>
-    <string name="icon_dark">Dark</string>
-    <string name="icon_light">Light</string>
+    <string name="settings_app_icon">App logo</string>
+    <string name="settings_app_icon_summary">Choose one of six launcher logos</string>
+    <string name="settings_app_icon_applied">Logo changed — it may take a moment to appear on your home screen.</string>
+    <string name="settings_app_icon_widget_hint">Want your own picture? Add a GarPulse widget, set its picture and tap action to open GarPulse — the widget itself becomes a one-tap launcher on your home screen.</string>
+    <string name="icon_default">Classic coral G</string>
+    <string name="icon_heart">Heart pulse</string>
+    <string name="icon_ribbon">Rising wave</string>
+    <string name="icon_watch">Wrist pulse</string>
+    <string name="icon_stopwatch">Hand-drawn stopwatch</string>
+    <string name="icon_diamond">Diamond pulse</string>
     <string name="settings_overview_columns">Overview columns</string>
     <string name="settings_overview_columns_summary">%1$d columns on the Overview screen</string>
     <string name="settings_units">Units</string>
@@ -202,6 +202,10 @@
 
     <!-- Widget editor -->
     <string name="widget_editor_title">Customize widget</string>
+    <string name="widget_editor_name">Widget name</string>
+    <string name="widget_editor_name_hint">Only used to tell placements apart inside GarPulse (manager list and this screen). It is never drawn on the home screen. Leave empty to use the automatic name.</string>
+    <string name="widget_editor_name_placeholder">e.g. Home - Steps</string>
+    <string name="widget_name_auto">%1$s %2$d</string>
     <string name="widget_editor_layout">Layout</string>
     <string name="widget_layout_single">Single</string>
     <string name="widget_layout_multi">Multi</string>
@@ -211,20 +215,23 @@
     <string name="widget_editor_add_metric_hint">No metrics yet — with a picture set, the widget shows the picture alone. Add a metric to draw it on top.</string>
     <string name="widget_editor_appearance">Appearance</string>
     <string name="widget_editor_font_size">Text size: %1$d sp</string>
-    <string name="widget_editor_opacity">Background opacity: %1$d%%</string>
+    <string name="widget_editor_opacity">Background transparency: %1$d%%</string>
     <string name="widget_editor_background">Background colour</string>
     <string name="widget_editor_show_chart">Show chart</string>
-    <string name="widget_editor_show_labels">Show labels and values</string>
+    <string name="widget_editor_show_labels">Show metric labels</string>
     <string name="widget_editor_strip_coverage">Refresh strip coverage: %1$d%%</string>
     <string name="widget_editor_strip_wave">Wave amplitude: %1$d%%</string>
-    <string name="widget_editor_strip_opacity">Refresh strip opacity: %1$d%%</string>
+    <string name="widget_editor_strip_opacity">Refresh strip transparency: %1$d%%</string>
     <string name="widget_editor_strip_color">Refresh strip colour</string>
     <string name="widget_editor_strip_color_auto">Default ribbon</string>
-    <string name="widget_editor_strip_hint">Fully transparent = invisible, but tapping the strip area still refreshes.</string>
+    <string name="widget_editor_strip_hint">100% transparency hides the strip, but tapping that left band still refreshes.</string>
     <string name="widget_editor_metric_color">Custom colour</string>
     <string name="widget_editor_metric_color_auto">%1$s: automatic colour</string>
     <string name="widget_editor_refresh_strip">Left refresh strip</string>
     <string name="widget_editor_tap">Open app on tap</string>
+    <string name="widget_editor_show_value">Show value</string>
+    <string name="widget_editor_strip_settings">Refresh strip settings</string>
+    <string name="widget_editor_auto_short">Auto</string>
     <string name="widget_editor_search_app">Search apps</string>
     <string name="tap_shortcut_header">Built-in destinations</string>
     <string name="tap_shortcut_refresh">Refresh widget</string>
@@ -232,26 +239,11 @@
     <string name="tap_shortcut_insights">Insights screen</string>
     <string name="tap_shortcut_widgets">Widget manager</string>
     <string name="tap_shortcut_settings">Settings screen</string>
-    <string name="dev_master_switch">Developer tuning</string>
-    <string name="dev_refresh_frames">Wave duration: %1$d frames</string>
-    <string name="dev_source_layout">Overview source badge layout</string>
-    <string name="dev_source_style">Overview source badge style</string>
-    <string name="dev_source_style_hint">How the badge is drawn. With developer tuning on, “Hidden” hides badges everywhere and the other styles also force badges to show in Health-Connect-only mode, so you can compare combinations.</string>
-    <string name="src_style_text">Colour dot + text</string>
-    <string name="src_style_dot">Colour dot only</string>
-    <string name="src_style_hidden">Hidden</string>
     <string name="settings_overview_spark">Overview trend chart placement</string>
     <string name="settings_overview_spark_separated">Chart in its own slot below the value</string>
     <string name="settings_overview_spark_behind">Chart drawn behind the title and value</string>
-    <string name="src_layout_after_title">Title on first row, badge after title</string>
-    <string name="src_layout_after_icon">Badge after icon (first row)</string>
-    <string name="src_layout_second_start">Badge on second row, left</string>
-    <string name="src_layout_second_end">Badge on second row, right</string>
-    <string name="dev_section">Developer</string>
-    <string name="dev_refresh_speed">Refresh wave speed: %1$.1f×</string>
-    <string name="dev_refresh_speed_hint">Multiplier on the refresh-strip wave animation (1× = original 90 ms/frame, default 5×).</string>
-    <string name="widget_tap_default">GarPulse metric detail</string>
-    <string name="widget_tap_reset">Reset</string>
+    <string name="widget_tap_default">Don\'t open any app</string>
+    <string name="widget_tap_reset">Clear</string>
 
     <!-- In-app widget manager -->
     <string name="widget_manager_title">My widgets</string>
@@ -301,6 +293,13 @@
     <string name="widget_tap_uri_hint">e.g. mijia://…</string>
     <string name="widget_tap_uri_use">Use this link</string>
     <string name="widget_tap_open_failed">Couldn\'t open the target page; opened the app\'s main screen instead</string>
+    <string name="widget_tap_export_apps">Export app list (txt)</string>
+    <string name="widget_tap_export_pages">Export page list (txt)</string>
+    <string name="widget_tap_export_apps_title">Launchable apps on this device</string>
+    <string name="widget_tap_export_pages_title">Openable in-app pages of %1$s</string>
+    <string name="widget_tap_export_count">%1$d entries. Format: name | package | component</string>
+    <string name="widget_tap_export_done">List saved.</string>
+    <string name="widget_tap_export_failed">Could not save the list.</string>
 
     <!-- Flexible widget sizes -->
     <string name="widget_size_title">Widget size</string>
@@ -326,10 +325,10 @@
     <!-- Adaptive cells, per-cell tap and independent card styling -->
     <string name="widget_editor_layout_hint">The grid adapts to the widget size and the number of metrics. Each cell can open its own app.</string>
     <string name="widget_editor_cell_tap">Set app</string>
-    <string name="widget_editor_tap_hint">The app chosen here is the default for cells without their own app.</string>
+    <string name="widget_editor_tap_hint">The app chosen here is the default for cells without their own app. A metric cell with nothing chosen opens that metric\'s detail page in GarPulse. Tapping the widget background or its picture with nothing chosen opens nothing; the trash icon clears the choice.</string>
     <string name="widget_editor_font_scale">Text size fine-tune: %1$d%%</string>
     <string name="widget_editor_card_color">Card colour</string>
-    <string name="widget_editor_card_opacity">Card opacity: %1$d%%</string>
+    <string name="widget_editor_card_opacity">Card transparency: %1$d%%</string>
     <string name="widget_size_1x5">1 × 5</string>
     <string name="widget_size_4x5">4 × 5</string>
     <string name="widget_sized_1x5_name">GarPulse 1 × 5</string>
@@ -348,7 +347,7 @@
     <string name="widget_editor_image_selected">Picture ready</string>
     <string name="widget_editor_image_none">No picture</string>
     <string name="widget_editor_image_choose">Choose…</string>
-    <string name="widget_editor_image_opacity">Picture brightness: %1$d%%</string>
+    <string name="widget_editor_image_opacity">Picture transparency: %1$d%%</string>
     <string name="widget_editor_image_hint">The picture is the background. With no metrics it fills the whole widget; add metrics and they appear on top. Tap the empty preview above to add a picture.</string>
     <string name="widget_editor_preview_add_image">＋ Tap to add a picture</string>
     <string name="widget_editor_add_image">Add picture</string>
@@ -408,4 +407,110 @@
     <string name="garmin_api_key_cleared">API key cleared</string>
     <string name="garmin_api_source_switched">Data source updated</string>
     <string name="garmin_api_status_idle">Not synced yet</string>
+
+    <!-- Help ("?") buttons -->
+    <string name="help_open">Help: %1$s</string>
+    <string name="action_got_it">Got it</string>
+    <string name="help_dashboard_title">Overview</string>
+    <string name="help_detail_title">Metric detail</string>
+    <string name="help_widget_manager_title">My widgets</string>
+    <string name="help_widget_editor_title">Widget setup</string>
+    <string name="help_widget_preview_title">Preview</string>
+    <string name="help_widget_name_title">Widget name</string>
+    <string name="help_widget_image_title">Picture</string>
+    <string name="help_widget_tap_title">Tap action</string>
+    <string name="help_widget_metrics_title">Metrics</string>
+    <string name="help_widget_appearance_title">Appearance</string>
+    <string name="help_settings_title">Settings</string>
+    <string name="help_settings_data_title">Data</string>
+    <string name="help_settings_source_title">Data source</string>
+    <string name="help_settings_display_title">Display</string>
+    <string name="help_settings_export_title">Export</string>
+    <string name="help_settings_about_title">About</string>
+
+    <string-array name="help_dashboard">
+        <item>Cards show the latest value and its trend. Tap a card to open the metric detail.</item>
+        <item>Long-press any card to reorder, hide or restore cards. Changes save immediately.</item>
+        <item>The tune icon in the top bar also enters edit mode; the refresh icon re-reads health data.</item>
+        <item>A card without permission prompts you to open the Data settings and grant access.</item>
+        <item>Use Settings to change the number of columns and where the trend chart appears.</item>
+    </string-array>
+    <string-array name="help_detail">
+        <item>The header shows the current value and goal progress when a goal exists.</item>
+        <item>The chart shows history; statistics and the most recent records are listed below.</item>
+        <item>A source badge marks data coming from Garmin or another connected source.</item>
+        <item>Values follow the unit system chosen in Settings.</item>
+    </string-array>
+    <string-array name="help_widget_manager">
+        <item>Tap Add a widget to configure it first; your launcher then asks where to place it.</item>
+        <item>Tap any placed widget in the list to edit its metrics, picture, tap action and appearance.</item>
+        <item>A widget name only helps you tell placements apart inside GarPulse; it never appears on the home screen.</item>
+        <item>For a photo launcher, set a picture on the widget and set its tap action to open GarPulse.</item>
+    </string-array>
+    <string-array name="help_widget_editor">
+        <item>Sections run top to bottom: preview, name, picture, tap action, metrics and appearance.</item>
+        <item>Every change updates the preview at once and reaches the home screen after Save.</item>
+        <item>The question mark on each section explains that section in detail.</item>
+    </string-array>
+    <string-array name="help_widget_preview">
+        <item>The preview follows your metric count and appearance settings in real time.</item>
+        <item>Widget size is suggested automatically; long-press the placed widget to resize it.</item>
+    </string-array>
+    <string-array name="help_widget_name">
+        <item>The name only distinguishes widgets inside GarPulse, never on the home screen.</item>
+        <item>Leave it empty for an automatic kind name plus its number; the trash icon clears it.</item>
+    </string-array>
+    <string-array name="help_widget_image">
+        <item>The picture sits behind the cards: it fills an empty widget and underlays metric cards.</item>
+        <item>Tap the empty preview or Choose to add a picture; transparency 100 percent means fully transparent.</item>
+        <item>All sliders move in one-percent steps.</item>
+    </string-array>
+    <string-array name="help_widget_tap">
+        <item>Set a tap target for the whole widget or picture and, separately, for each metric cell.</item>
+        <item>A metric cell with no target opens that metric detail inside GarPulse.</item>
+        <item>With nothing chosen, tapping the background or picture does nothing; the trash icon clears a choice.</item>
+        <item>Export the app list or an app page list as a txt file to hand to an AI when picking a target.</item>
+    </string-array>
+    <string-array name="help_widget_metrics">
+        <item>Adding metrics updates the suggested widget size and the preview immediately.</item>
+        <item>Tap a metric row to choose the app or page it opens when tapped.</item>
+        <item>The refresh strip reads the latest health data; its animation keeps running until the read finishes.</item>
+    </string-array>
+    <string-array name="help_widget_appearance">
+        <item>Transparency 100 percent is fully transparent, 0 percent is fully opaque; sliders use one-percent steps.</item>
+        <item>Switches control the source badge, chart, metric labels, values and refresh strip.</item>
+        <item>Only elements that exist are listed; indented settings belong to the option above them.</item>
+        <item>Tap a colour swatch to change it; the selected swatch has an outline.</item>
+    </string-array>
+    <string-array name="help_settings">
+        <item>Data manages permissions; Data source chooses Health Connect, Garmin or both.</item>
+        <item>Display controls columns, chart placement, units, language and the app logo.</item>
+        <item>Export saves your accessible data to CSV or JSON.</item>
+        <item>Each section title has its own question mark with more detail.</item>
+    </string-array>
+    <string-array name="help_settings_data">
+        <item>Manage data access opens Health Connect to grant or revoke health data types.</item>
+        <item>Cards without permission prompt you to come back here.</item>
+        <item>Data stays on your device; nothing is uploaded unless you export it yourself.</item>
+    </string-array>
+    <string-array name="help_settings_source">
+        <item>Automatic reads aggregated Health Connect data, including data synced by other apps.</item>
+        <item>Garmin API needs a personal API key; priority decides which source wins when both exist.</item>
+        <item>The source badge on each card shows whether Garmin supplied the value.</item>
+        <item>Your key is never shown again; leaving the field blank keeps the saved key.</item>
+    </string-array>
+    <string-array name="help_settings_display">
+        <item>Overview columns accepts one to ten columns.</item>
+        <item>The trend chart can sit below the value or become the card backdrop.</item>
+        <item>Units and language take effect at once; choose one of six app logos here.</item>
+        <item>To use your own photo as an entry point, set a picture on a widget and its tap action to open GarPulse.</item>
+    </string-array>
+    <string-array name="help_settings_export">
+        <item>Choose CSV or JSON and save the file wherever you like.</item>
+        <item>Only data you have granted access to is exported; nothing is sent online.</item>
+    </string-array>
+    <string-array name="help_settings_about">
+        <item>Shows the app version and the open-source repository.</item>
+        <item>The privacy note at the bottom of this page explains how data is handled.</item>
+    </string-array>
 </resources>

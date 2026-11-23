@@ -157,6 +157,30 @@ object WidgetCatalog {
             metricNames.takeIf { it.isNotBlank() },
         ).joinToString(" · ")
     }
+
+    /**
+     * Label shown for one placement: the user's own name when set, otherwise the widget kind plus
+     * an ordinal so identical layouts stay apart ("Heatmap 2"). [ordinal] is 1-based.
+     */
+    fun displayName(context: Context, instance: WidgetInstance, ordinal: Int = 1): String {
+        instance.config.name?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+        val kindLabel = context.getString(instance.kind.labelRes)
+        return if (ordinal <= 1) kindLabel
+        else context.getString(R.string.widget_name_auto, kindLabel, ordinal)
+    }
+
+    /**
+     * Ordinal of each instance among widgets of the same kind, keyed by appWidgetId. Clamped to
+     * at least 1 so [displayName] never formats a "0".
+     */
+    fun ordinals(instances: List<WidgetInstance>): Map<Int, Int> {
+        val seen = mutableMapOf<WidgetKind, Int>()
+        return instances.associate { instance ->
+            val next = (seen[instance.kind] ?: 0) + 1
+            seen[instance.kind] = next
+            instance.appWidgetId to next
+        }.mapValues { (_, value) -> value.coerceAtLeast(1) }
+    }
 }
 
 internal fun WidgetLayout.labelRes(): Int = when (this) {

@@ -36,8 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.easonhuang.garpulse.R
 import dev.easonhuang.garpulse.data.ValueSource
-import dev.easonhuang.garpulse.data.SourceBadgeLayout
-import dev.easonhuang.garpulse.data.SourceBadgeStyle
 import dev.easonhuang.garpulse.data.MetricSummary
 import dev.easonhuang.garpulse.data.title
 import dev.easonhuang.garpulse.data.unit
@@ -50,8 +48,6 @@ fun MetricCard(
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
     showSource: Boolean = false,
-    sourceLayout: SourceBadgeLayout = SourceBadgeLayout.AFTER_TITLE,
-    sourceStyle: SourceBadgeStyle = SourceBadgeStyle.TEXT,
     sparkBehind: Boolean = false,
 ) {
     val accent = summary.metric.accent
@@ -100,46 +96,21 @@ fun MetricCard(
                             modifier = Modifier.size(20.dp),
                         )
                     }
-                    if (sourceLayout == SourceBadgeLayout.AFTER_TITLE) {
-                        Spacer(Modifier.size(8.dp))
-                        // Title lives on the header row, after the icon; the badge follows it.
-                        Text(
-                            text = summary.metric.title,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (showSource) SourceBadge(summary.source, compact, sourceStyle)
-                    } else {
-                        Spacer(Modifier.weight(1f))
-                        if (showSource && sourceLayout == SourceBadgeLayout.AFTER_ICON) {
-                            SourceBadge(summary.source, compact, sourceStyle)
-                        }
+                    // The source badge sits directly after the icon, before the title.
+                    if (showSource) {
+                        Spacer(Modifier.size(6.dp))
+                        SourceBadge(summary.source, compact)
                     }
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        text = summary.metric.title,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
-                if (sourceLayout != SourceBadgeLayout.AFTER_TITLE) {
-                    Spacer(Modifier.height(12.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (showSource && sourceLayout == SourceBadgeLayout.SECOND_START) {
-                            SourceBadge(summary.source, compact, sourceStyle)
-                            Spacer(Modifier.size(8.dp))
-                        }
-                        Text(
-                            text = summary.metric.title,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (showSource && sourceLayout == SourceBadgeLayout.SECOND_END) {
-                            Spacer(Modifier.size(8.dp))
-                            SourceBadge(summary.source, compact, sourceStyle)
-                        }
-                    }
-                } else {
-                    Spacer(Modifier.height(2.dp))
-                }
+                Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         text = if (locked) stringResource(R.string.card_locked) else summary.value,
@@ -175,17 +146,16 @@ fun MetricCard(
 }
 
 /**
- * Compact source tag. Colour is the primary carrier (teal = synced, blue = Garmin); the short
- * text keeps it unambiguous for colour-blind users, satisfying WCAG's "not colour alone" rule.
- * In [compact] form (narrow columns) only the dot is drawn — TalkBack still reads the source,
- * and the dot never clips.
+ * Compact source tag: a colour dot plus the short source name. Colour is the primary carrier
+ * (teal = synced, blue = Garmin); the text keeps it unambiguous for colour-blind users, satisfying
+ * WCAG's "not colour alone" rule. In [compact] form (narrow columns) only the dot is drawn —
+ * TalkBack still reads the source, and the dot never clips.
  */
 @Composable
-private fun SourceBadge(source: ValueSource, compact: Boolean = false, style: SourceBadgeStyle = SourceBadgeStyle.TEXT) {
-    if (style == SourceBadgeStyle.HIDDEN) return
+private fun SourceBadge(source: ValueSource, compact: Boolean = false) {
     val tint = source.badgeColor
     val label = stringResource(source.shortRes)
-    if (compact || style == SourceBadgeStyle.DOT) {
+    if (compact) {
         Box(
             Modifier
                 .size(12.dp)

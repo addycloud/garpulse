@@ -17,11 +17,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,6 +39,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Link
@@ -91,6 +94,7 @@ import dev.easonhuang.garpulse.R
 import dev.easonhuang.garpulse.data.LanguagePreferences
 import dev.easonhuang.garpulse.data.Metric
 import dev.easonhuang.garpulse.data.title
+import dev.easonhuang.garpulse.ui.components.HelpButton
 import dev.easonhuang.garpulse.ui.theme.GarPulseTheme
 import dev.easonhuang.garpulse.ui.widgets.ColorPickerDialog
 import dev.easonhuang.garpulse.ui.widgets.WidgetPreviewCard
@@ -243,6 +247,9 @@ private val COLOR_PRESETS = listOf(
     0xFF3B2A4A, 0xFF1B3A32, 0xFFFFFFFF,
 )
 
+/** Keeps a name on one line in the manager list and the editor title bar. */
+private const val MAX_NAME_LENGTH = 24
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WidgetEditor(
@@ -286,8 +293,16 @@ private fun WidgetEditor(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.widget_editor_title)) },
+                title = {
+                    Text(
+                        config.name?.trim()?.takeIf { it.isNotBlank() }
+                            ?: stringResource(R.string.widget_editor_title),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
                 actions = {
+                    HelpButton(R.string.help_widget_editor_title, R.array.help_widget_editor)
                     if (draftMode) {
                         FilledTonalButton(onClick = { onSaveAndAdd(config) }) {
                             Text(stringResource(R.string.widget_editor_save_and_add))
@@ -311,6 +326,8 @@ private fun WidgetEditor(
                 EditorSection(
                     icon = Icons.Rounded.Visibility,
                     title = stringResource(R.string.widget_editor_preview),
+                    helpTitleRes = R.string.help_widget_preview_title,
+                    helpLinesRes = R.array.help_widget_preview,
                     trailing = {
                         AssistChip(
                             onClick = {},
@@ -342,11 +359,43 @@ private fun WidgetEditor(
                 }
             }
 
+            // ---- Name -----------------------------------------------------------------------
+            // Purely an organizational label: it never reaches the home screen, it only makes
+            // several placements distinguishable in the manager and in this title bar.
+            item {
+                EditorSection(
+                    icon = Icons.Rounded.Edit,
+                    title = stringResource(R.string.widget_editor_name),
+                    helpTitleRes = R.string.help_widget_name_title,
+                    helpLinesRes = R.array.help_widget_name,
+                ) {
+                    Spacer(Modifier.size(8.dp))
+                    OutlinedTextField(
+                        value = config.name.orEmpty(),
+                        onValueChange = { config = config.copy(name = it.take(MAX_NAME_LENGTH)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text(stringResource(R.string.widget_editor_name_placeholder)) },
+                        trailingIcon = {
+                            if (!config.name.isNullOrBlank()) {
+                                IconButton(onClick = { config = config.copy(name = null) }) {
+                                    Icon(Icons.Rounded.Delete, stringResource(R.string.widget_tap_reset))
+                                }
+                            }
+                        },
+                    )
+                    Spacer(Modifier.size(6.dp))
+                    HintText(stringResource(R.string.widget_editor_name_hint))
+                }
+            }
+
             // ---- Picture -------------------------------------------------------------------
             item {
                 EditorSection(
                     icon = Icons.Rounded.Image,
                     title = stringResource(R.string.widget_editor_image),
+                    helpTitleRes = R.string.help_widget_image_title,
+                    helpLinesRes = R.array.help_widget_image,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
@@ -372,11 +421,11 @@ private fun WidgetEditor(
                     if (config.imagePath != null) {
                         Spacer(Modifier.size(12.dp))
                         SliderRow(
-                            label = stringResource(R.string.widget_editor_image_opacity, config.imageOpacity),
-                            value = config.imageOpacity.toFloat(),
+                            label = stringResource(R.string.widget_editor_image_opacity, config.imageTransparency),
+                            value = config.imageTransparency.toFloat(),
                             range = 0f..100f,
-                            steps = 9,
-                            onChange = { config = config.copy(imageOpacity = it.toInt()) },
+                            steps = 99,
+                            onChange = { config = config.copy(imageOpacity = 100 - it.roundToInt()) },
                         )
                         Spacer(Modifier.size(4.dp))
                         TextButton(onClick = {
@@ -394,6 +443,8 @@ private fun WidgetEditor(
                 EditorSection(
                     icon = Icons.Rounded.Link,
                     title = stringResource(R.string.widget_editor_tap),
+                    helpTitleRes = R.string.help_widget_tap_title,
+                    helpLinesRes = R.array.help_widget_tap,
                 ) {
                     val pkg = config.tapActivity?.let { ComponentName.unflattenFromString(it)?.packageName }
                         ?: config.tapPackage
@@ -410,6 +461,7 @@ private fun WidgetEditor(
                         pkg != null -> stringResource(R.string.widget_editor_tap_app, appLabel(pkg))
                         else -> stringResource(R.string.widget_tap_default)
                     }
+                    val hasTarget = config.tapPackage != null || config.tapActivity != null || config.tapUri != null
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -419,18 +471,36 @@ private fun WidgetEditor(
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                        IconButton(onClick = {
-                            if (config.tapPackage != null && TapShortcuts.isShortcut(config.tapPackage!!)) {
-                                scope.launch { TapShortcuts.launch(context, config.tapPackage!!, null) }
-                            } else {
-                                runCatching { testTapIntent(context, config)?.let(context::startActivity) }
-                            }
-                        }) { Icon(Icons.Rounded.Visibility, stringResource(R.string.widget_tap_test)) }
-                        IconButton(onClick = {
-                            config = config.copy(tapPackage = null, tapActivity = null, tapUri = null)
-                        }) {
-                            Icon(Icons.Rounded.Delete, stringResource(R.string.widget_tap_reset))
+                        Text(
+                            label,
+                            Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (hasTarget) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        // Testing only makes sense when something is actually configured.
+                        if (hasTarget) {
+                            IconButton(onClick = {
+                                if (config.tapPackage != null && TapShortcuts.isShortcut(config.tapPackage!!)) {
+                                    scope.launch { TapShortcuts.launch(context, config.tapPackage!!, null) }
+                                } else {
+                                    runCatching { testTapIntent(context, config)?.let(context::startActivity) }
+                                }
+                            }) { Icon(Icons.Rounded.Visibility, stringResource(R.string.widget_tap_test)) }
+                        }
+                        // Clearing is always allowed: "open nothing" is a valid choice.
+                        IconButton(
+                            onClick = {
+                                config = config.copy(tapPackage = null, tapActivity = null, tapUri = null)
+                            },
+                            enabled = hasTarget,
+                        ) {
+                            Icon(
+                                Icons.Rounded.Delete,
+                                stringResource(R.string.widget_tap_reset),
+                                tint = if (hasTarget) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            )
                         }
                     }
                     Spacer(Modifier.size(8.dp))
@@ -442,6 +512,8 @@ private fun WidgetEditor(
                 EditorSection(
                     icon = Icons.Rounded.MonitorHeart,
                     title = stringResource(R.string.widget_editor_metrics),
+                    helpTitleRes = R.string.help_widget_metrics_title,
+                    helpLinesRes = R.array.help_widget_metrics,
                 ) {
                     if (config.metrics.isEmpty()) {
                         HintText(stringResource(R.string.widget_editor_add_metric_hint))
@@ -490,109 +562,124 @@ private fun WidgetEditor(
 
             // ---- Appearance ----------------------------------------------------------------
             item {
+                // There is no such thing as "the appearance of a metric that isn't there", so the
+                // whole metric-dependent half of this section collapses when the list is empty.
+                val hasMetrics = config.metrics.isNotEmpty()
                 EditorSection(
                     icon = Icons.Rounded.Palette,
                     title = stringResource(R.string.widget_editor_appearance),
+                    helpTitleRes = R.string.help_widget_appearance_title,
+                    helpLinesRes = R.array.help_widget_appearance,
                 ) {
-                    SliderRow(
-                        label = stringResource(R.string.widget_editor_font_scale, (config.fontScale * 100).roundToInt()),
-                        value = config.fontScale,
-                        range = WidgetConfig.MIN_FONT_SCALE..WidgetConfig.MAX_FONT_SCALE,
-                        steps = 10,
-                        onChange = { config = config.copy(fontScale = it) },
-                    )
-                    SliderRow(
-                        label = stringResource(R.string.widget_editor_card_opacity, config.cardOpacity),
-                        value = config.cardOpacity.toFloat(),
-                        range = 0f..100f,
-                        steps = 9,
-                        onChange = { config = config.copy(cardOpacity = it.toInt()) },
-                    )
-                    SliderRow(
-                        label = stringResource(R.string.widget_editor_opacity, config.backgroundOpacity),
-                        value = config.backgroundOpacity.toFloat(),
-                        range = 0f..100f,
-                        steps = 9,
-                        onChange = { config = config.copy(backgroundOpacity = it.toInt()) },
-                    )
-                    Spacer(Modifier.size(4.dp))
-                    val textColorNow = config.textColor ?: Color(config.accentColor?.toArgb() ?: 0xFFFFFFFF.toInt())
-                    SettingLabel(stringResource(R.string.widget_editor_text_color))
-                    ColorRow(
-                        color = textColorNow,
-                        presets = emptyList(),
-                        onPreset = {},
-                        onPick = { colorTarget = ColorTarget.TEXT },
-                        onAuto = { config = config.copy(textColor = null) },
-                        autoLabel = stringResource(R.string.widget_editor_auto_color),
-                        showAuto = true,
-                    )
-                    Spacer(Modifier.size(10.dp))
-                    SettingLabel(stringResource(R.string.widget_editor_card_color))
-                    ColorRow(
-                        color = config.cardColor,
-                        presets = COLOR_PRESETS,
-                        onPreset = { config = config.copy(cardColor = it.copy(alpha = 1f)) },
-                        onPick = { colorTarget = ColorTarget.CARD },
-                    )
-                    Spacer(Modifier.size(10.dp))
-                    SettingLabel(stringResource(R.string.widget_editor_background_color))
-                    ColorRow(
-                        color = config.backgroundColor,
-                        presets = COLOR_PRESETS,
-                        onPreset = { config = config.copy(backgroundColor = it.copy(alpha = 1f)) },
-                        onPick = { colorTarget = ColorTarget.BACKGROUND },
-                    )
-                    Spacer(Modifier.size(8.dp))
-                    ToggleRow(stringResource(R.string.widget_editor_show_chart), config.showChart) {
-                        config = config.copy(showChart = it)
-                    }
-                    ToggleRow(stringResource(R.string.widget_editor_show_labels), config.showLabels) {
-                        config = config.copy(showLabels = it)
+                    // Switches come FIRST: they decide which elements exist, and every element
+                    // specific setting below only shows while its element is actually present.
+                    if (hasMetrics) {
+                        ToggleRow(stringResource(R.string.widget_editor_show_source), config.showSource) {
+                            config = config.copy(showSource = it)
+                        }
+                        ToggleRow(stringResource(R.string.widget_editor_show_chart), config.showChart) {
+                            config = config.copy(showChart = it)
+                        }
+                        ToggleRow(stringResource(R.string.widget_editor_show_labels), config.showLabels) {
+                            config = config.copy(showLabels = it)
+                        }
+                        ToggleRow(stringResource(R.string.widget_editor_show_value), config.showValue) {
+                            config = config.copy(showValue = it)
+                        }
                     }
                     ToggleRow(stringResource(R.string.widget_editor_refresh_strip), config.showRefreshStrip) {
                         config = config.copy(showRefreshStrip = it)
                     }
                     if (config.showRefreshStrip) {
-                        SliderRow(
-                            label = stringResource(R.string.widget_editor_strip_coverage, config.stripCoverage),
-                            value = config.stripCoverage.toFloat(),
-                            range = WidgetConfig.MIN_STRIP_COVERAGE.toFloat()..WidgetConfig.MAX_STRIP_COVERAGE.toFloat(),
-                            steps = 18,
-                            onChange = { config = config.copy(stripCoverage = it.roundToInt()) },
-                        )
+                        // Child settings of the switch above — visually nested on purpose.
+                        ChildSettings(stringResource(R.string.widget_editor_strip_settings)) {
+                            SliderRow(
+                                label = stringResource(R.string.widget_editor_strip_coverage, config.stripCoverage),
+                                value = config.stripCoverage.toFloat(),
+                                range = WidgetConfig.MIN_STRIP_COVERAGE.toFloat()..WidgetConfig.MAX_STRIP_COVERAGE.toFloat(),
+                                steps = WidgetConfig.MAX_STRIP_COVERAGE - WidgetConfig.MIN_STRIP_COVERAGE - 1,
+                                onChange = { config = config.copy(stripCoverage = it.roundToInt()) },
+                            )
+                            SliderRow(
+                                label = stringResource(
+                                    R.string.widget_editor_strip_wave,
+                                    (config.stripWave * 100f).roundToInt(),
+                                ),
+                                value = config.stripWave,
+                                range = WidgetConfig.MIN_STRIP_WAVE..WidgetConfig.MAX_STRIP_WAVE,
+                                steps = 199,
+                                onChange = { config = config.copy(stripWave = it) },
+                            )
+                            SliderRow(
+                                label = stringResource(R.string.widget_editor_strip_opacity, config.stripTransparency),
+                                value = config.stripTransparency.toFloat(),
+                                range = 0f..100f,
+                                steps = 99,
+                                onChange = { config = config.copy(stripOpacity = 100 - it.roundToInt()) },
+                            )
+                            ColorSettingRow(
+                                label = stringResource(R.string.widget_editor_strip_color),
+                                color = config.stripColor ?: Color.White,
+                                onCustom = { colorTarget = ColorTarget.STRIP },
+                                autoLabel = stringResource(R.string.widget_editor_auto_short),
+                                autoActive = config.stripColor == null,
+                                onAuto = { config = config.copy(stripColor = null) },
+                            )
+                            Spacer(Modifier.size(4.dp))
+                            HintText(stringResource(R.string.widget_editor_strip_hint))
+                        }
+                    }
+                    if (hasMetrics) {
+                        Spacer(Modifier.size(6.dp))
                         SliderRow(
                             label = stringResource(
-                                R.string.widget_editor_strip_wave,
-                                (config.stripWave * 100f).roundToInt(),
+                                R.string.widget_editor_font_scale,
+                                (config.fontScale * 100).roundToInt(),
                             ),
-                            value = config.stripWave,
-                            range = WidgetConfig.MIN_STRIP_WAVE..WidgetConfig.MAX_STRIP_WAVE,
-                            steps = 7,
-                            onChange = { config = config.copy(stripWave = it) },
+                            value = config.fontScale,
+                            range = WidgetConfig.MIN_FONT_SCALE..WidgetConfig.MAX_FONT_SCALE,
+                            steps = 99, // 1% precision across 60%..160%
+                            onChange = { config = config.copy(fontScale = it) },
+                        )
+                        val textColorNow = config.textColor
+                            ?: Color(config.accentColor?.toArgb() ?: 0xFFFFFFFF.toInt())
+                        ColorSettingRow(
+                            label = stringResource(R.string.widget_editor_text_color),
+                            color = textColorNow,
+                            onCustom = { colorTarget = ColorTarget.TEXT },
+                            autoLabel = stringResource(R.string.widget_editor_auto_short),
+                            autoActive = config.textColor == null,
+                            onAuto = { config = config.copy(textColor = null) },
                         )
                         SliderRow(
-                            label = stringResource(R.string.widget_editor_strip_opacity, config.stripOpacity),
-                            value = config.stripOpacity.toFloat(),
+                            label = stringResource(R.string.widget_editor_card_opacity, config.cardTransparency),
+                            value = config.cardTransparency.toFloat(),
                             range = 0f..100f,
-                            steps = 9,
-                            onChange = { config = config.copy(stripOpacity = it.toInt()) },
+                            steps = 99,
+                            onChange = { config = config.copy(cardOpacity = 100 - it.roundToInt()) },
                         )
-                        SettingLabel(stringResource(R.string.widget_editor_strip_color))
-                        ColorRow(
-                            color = config.stripColor ?: Color.White,
-                            presets = emptyList(),
-                            onPreset = {},
-                            onPick = { colorTarget = ColorTarget.STRIP },
-                            onAuto = { config = config.copy(stripColor = null) },
-                            autoLabel = stringResource(R.string.widget_editor_strip_color_auto),
-                            showAuto = true,
+                        ColorSettingRow(
+                            label = stringResource(R.string.widget_editor_card_color),
+                            color = config.cardColor,
+                            presets = COLOR_PRESETS,
+                            onSelect = { config = config.copy(cardColor = it.copy(alpha = 1f)) },
+                            onCustom = { colorTarget = ColorTarget.CARD },
                         )
-                        HintText(stringResource(R.string.widget_editor_strip_hint))
                     }
-                    ToggleRow(stringResource(R.string.widget_editor_show_source), config.showSource) {
-                        config = config.copy(showSource = it)
-                    }
+                    SliderRow(
+                        label = stringResource(R.string.widget_editor_opacity, config.backgroundTransparency),
+                        value = config.backgroundTransparency.toFloat(),
+                        range = 0f..100f,
+                        steps = 99,
+                        onChange = { config = config.copy(backgroundOpacity = 100 - it.roundToInt()) },
+                    )
+                    ColorSettingRow(
+                        label = stringResource(R.string.widget_editor_background_color),
+                        color = config.backgroundColor,
+                        presets = COLOR_PRESETS,
+                        onSelect = { config = config.copy(backgroundColor = it.copy(alpha = 1f)) },
+                        onCustom = { colorTarget = ColorTarget.BACKGROUND },
+                    )
                 }
             }
 
@@ -719,66 +806,126 @@ private fun WidgetEditor(
     }
 }
 
+/**
+ * One colour setting = ONE row: label on the left, swatches inline, and the selected swatch
+ * marked with a ring. Compact on purpose — three colour settings used to consume most of a
+ * screen, which buried the switches that actually matter.
+ */
 @Composable
-private fun ColorRow(
+private fun ColorSettingRow(
+    label: String,
     color: Color,
-    presets: List<Long>,
-    onPreset: (Color) -> Unit,
-    onPick: () -> Unit,
+    onCustom: () -> Unit,
+    presets: List<Long> = emptyList(),
+    onSelect: (Color) -> Unit = {},
     autoLabel: String? = null,
+    /** True when the setting is following the metric palette, i.e. no explicit colour. */
+    autoActive: Boolean = false,
     onAuto: (() -> Unit)? = null,
-    showAuto: Boolean = false,
 ) {
     val currentArgb = color.toArgb()
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Always show the colour actually in use, so the picker never hides the current choice.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(38.dp).clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.outline)
-                    .padding(2.dp),
-                contentAlignment = Alignment.Center,
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // The colour in use is always the first swatch, so the row never hides the truth.
+            Swatch(
+                color = color,
+                selected = presets.isEmpty() || presets.none { it.toInt() == currentArgb },
+                onClick = onCustom,
+            )
+            presets.forEach { argb ->
+                val preset = argb.toInt()
+                Swatch(
+                    color = Color(preset),
+                    selected = preset == currentArgb,
+                    onClick = { onSelect(Color(preset)) },
+                )
+            }
+            IconButton(onClick = onCustom, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Rounded.Palette,
+                    stringResource(R.string.color_picker_title),
+                    Modifier.size(18.dp),
+                )
+            }
+        }
+        if (autoLabel != null && onAuto != null) {
+            TextButton(
+                onClick = onAuto,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
             ) {
-                Box(Modifier.size(34.dp).clip(CircleShape).background(color))
-            }
-            Spacer(Modifier.size(10.dp))
-            Column(Modifier.weight(1f)) {
                 Text(
-                    stringResource(R.string.color_picker_current),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    "#%06X".format(currentArgb and 0xFFFFFF),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    autoLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (autoActive) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (autoActive) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            OutlinedButton(onClick = onPick) { Text(stringResource(R.string.color_picker_title)) }
-            if (showAuto && onAuto != null && autoLabel != null) {
-                Spacer(Modifier.size(6.dp))
-                TextButton(onClick = onAuto) { Text(autoLabel) }
-            }
         }
-        if (presets.isNotEmpty()) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                presets.forEach { argb ->
-                    val preset = Color(argb.toInt())
-                    val isCurrent = currentArgb == argb.toInt()
-                    Box(
-                        Modifier.size(34.dp).clip(CircleShape)
-                            .background(if (isCurrent) MaterialTheme.colorScheme.primary else Color.Transparent)
-                            .padding(2.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Box(
-                            Modifier.size(30.dp).clip(CircleShape).background(preset)
-                                .clickable { onPreset(preset) },
-                        )
-                    }
-                }
-            }
-        }
+    }
+}
+
+/** A colour chip; the selected one gets a tinted outer ring instead of a tick. */
+@Composable
+private fun Swatch(color: Color, selected: Boolean, onClick: () -> Unit) {
+    val ring = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+    Box(
+        Modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick)
+            .background(if (selected) ring else Color.Transparent)
+            .padding(3.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+                .background(color)
+                .then(if (selected) Modifier else Modifier.border(1.dp, ring, CircleShape)),
+        )
+    }
+}
+
+/**
+ * Container for settings that only exist because a switch above is ON. Tinted surface + outline
+ * + its own small header make ownership obvious at a glance; the same pattern is used for every
+ * element-specific group in the editor, so it reads as one design language.
+ */
+@Composable
+private fun ChildSettings(title: String, content: @Composable ColumnScope.() -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp, start = 12.dp)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.55f))
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.30f), shape)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.size(6.dp))
+        content()
     }
 }
 
@@ -802,6 +949,36 @@ private fun AppPickerDialog(current: String?, onPick: (LauncherApp?) -> Unit, on
     var query by remember { mutableStateOf("") }
     var expandedPkg by remember { mutableStateOf<String?>(null) }
     var pages by remember { mutableStateOf<List<LauncherApp>>(emptyList()) }
+    val scope = rememberCoroutineScope()
+
+    // Export helpers: the lists are plain-text snapshots so the user can save them and hand
+    // them to an AI assistant when composing a tap target.
+    val saveAppsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val ok = writeTextFile(context, uri, exportAppsText(context, apps))
+                Toast.makeText(
+                    context,
+                    context.getString(if (ok) R.string.widget_tap_export_done else R.string.widget_tap_export_failed),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
+    }
+    val savePagesLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        val pkg = expandedPkg
+        if (uri != null && pkg != null) {
+            val appLabel = apps.firstOrNull { it.packageName == pkg }?.label ?: pkg
+            scope.launch {
+                val ok = writeTextFile(context, uri, exportPagesText(context, appLabel, pages))
+                Toast.makeText(
+                    context,
+                    context.getString(if (ok) R.string.widget_tap_export_done else R.string.widget_tap_export_failed),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
+    }
 
     // In-app pages the other app EXPORTS to the outside world. Not exported (e.g. Mi Home's
     // internal device screens) can never be opened by a third-party widget — Android's sandbox.
@@ -846,7 +1023,12 @@ private fun AppPickerDialog(current: String?, onPick: (LauncherApp?) -> Unit, on
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = { saveAppsLauncher.launch("garpulse-launchable-apps.txt") }) {
+                        Text(stringResource(R.string.widget_tap_export_apps))
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
                 LazyColumn(Modifier.height(320.dp)) {
                     item {
                         Row(
@@ -949,6 +1131,15 @@ private fun AppPickerDialog(current: String?, onPick: (LauncherApp?) -> Unit, on
                                     }
                                 }
                             }
+                            if (pages.isNotEmpty()) {
+                                TextButton(
+                                    onClick = {
+                                        val appLabel = apps.firstOrNull { it.packageName == app.packageName }?.label ?: app.packageName
+                                        savePagesLauncher.launch(safeFileName(appLabel) + "-pages.txt")
+                                    },
+                                    modifier = Modifier.padding(start = 40.dp, bottom = 8.dp),
+                                ) { Text(stringResource(R.string.widget_tap_export_pages)) }
+                            }
                         }
                     }
                 }
@@ -977,6 +1168,33 @@ private fun AppPickerDialog(current: String?, onPick: (LauncherApp?) -> Unit, on
     )
 }
 
+// ---- Tap-target list exports (plain text, meant to be handed to an AI assistant) --------------
+
+private fun exportAppsText(context: Context, apps: List<LauncherApp>): String = buildString {
+    appendLine(context.getString(R.string.widget_tap_export_apps_title))
+    appendLine(context.getString(R.string.widget_tap_export_count, apps.size))
+    apps.forEach { appendLine("${it.label} | ${it.packageName} | ${it.component}") }
+}
+
+private fun exportPagesText(context: Context, appLabel: String, pages: List<LauncherApp>): String = buildString {
+    appendLine(context.getString(R.string.widget_tap_export_pages_title, appLabel))
+    appendLine(context.getString(R.string.widget_tap_export_count, pages.size))
+    pages.forEach { appendLine("${it.label} | ${it.component}") }
+}
+
+private suspend fun writeTextFile(context: Context, uri: Uri, text: String): Boolean =
+    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        runCatching {
+            context.contentResolver.openOutputStream(uri)?.use { out ->
+                out.write(text.toByteArray(Charsets.UTF_8))
+            } != null
+        }.getOrDefault(false)
+    }
+
+/** Keeps an app label usable as a file name on every device. */
+private fun safeFileName(name: String): String =
+    name.replace(Regex("[\\\\/:*?\"<>|\\s]+"), "_").take(40)
+
 @Composable
 private fun appLabel(packageName: String): String {
     val pm = LocalContext.current.packageManager
@@ -999,6 +1217,8 @@ private fun appLabel(packageName: String): String {
 private fun EditorSection(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
+    helpTitleRes: Int? = null,
+    helpLinesRes: Int? = null,
     trailing: @Composable (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -1030,6 +1250,9 @@ private fun EditorSection(
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
+                if (helpTitleRes != null && helpLinesRes != null) {
+                    HelpButton(helpTitleRes, helpLinesRes, modifier = Modifier.size(36.dp))
+                }
                 if (trailing != null) trailing()
             }
             Spacer(Modifier.size(16.dp))
@@ -1045,17 +1268,6 @@ private fun HintText(text: String) {
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-}
-
-@Composable
-private fun SettingLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.Medium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Spacer(Modifier.size(6.dp))
 }
 
 @Composable

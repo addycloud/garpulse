@@ -145,16 +145,16 @@
     <string name="settings_export_summary">将可访问的数据保存为文件（CSV 或 JSON）</string>
     <string name="settings_section_display">显示</string>
     <string name="settings_section_export">导出</string>
-    <string name="settings_app_icon">应用图标</string>
-    <string name="settings_app_icon_summary">选择桌面图标样式</string>
-    <string name="settings_app_icon_applied">图标已更换，稍候会出现在桌面上。</string>
-    <string name="icon_custom">自定义图片…</string>
-    <string name="icon_custom_hint">用你选择的图片在桌面创建一个打开 GarPulse 的快捷方式</string>
-    <string name="icon_custom_applied">快捷方式已固定到桌面。</string>
-    <string name="icon_custom_failed">快捷方式创建失败。</string>
-    <string name="icon_default">GarPulse（渐变）</string>
-    <string name="icon_dark">暗色</string>
-    <string name="icon_light">亮色</string>
+    <string name="settings_app_icon">应用 Logo</string>
+    <string name="settings_app_icon_summary">从六款桌面 Logo 中选择</string>
+    <string name="settings_app_icon_applied">Logo 已更换，稍候会出现在桌面上。</string>
+    <string name="settings_app_icon_widget_hint">想用自己的图片？添加一个 GarPulse 小组件，设置图片与“点按打开 GarPulse”，桌面上的图片小组件就能一键启动应用。</string>
+    <string name="icon_default">经典珊瑚 G</string>
+    <string name="icon_heart">心跳印章</string>
+    <string name="icon_ribbon">上升波形</string>
+    <string name="icon_watch">腕上脉冲</string>
+    <string name="icon_stopwatch">手绘秒表</string>
+    <string name="icon_diamond">菱形脉冲</string>
     <string name="settings_overview_columns">概览列数</string>
     <string name="settings_overview_columns_summary">概览页每行显示 %1$d 列</string>
     <string name="settings_units">单位</string>
@@ -190,6 +190,10 @@
 
     <!-- 小组件编辑器 -->
     <string name="widget_editor_title">自定义小组件</string>
+    <string name="widget_editor_name">小组件名称</string>
+    <string name="widget_editor_name_hint">仅用于在 GarPulse 内区分多个小组件（管理列表和本页标题），不会显示在桌面上。留空则使用自动名称。</string>
+    <string name="widget_editor_name_placeholder">例如：首页 · 步数</string>
+    <string name="widget_name_auto">%1$s %2$d</string>
     <string name="widget_editor_layout">布局</string>
     <string name="widget_layout_single">单项</string>
     <string name="widget_layout_multi">多项</string>
@@ -199,20 +203,23 @@
     <string name="widget_editor_add_metric_hint">暂无指标 — 设置图片后小组件将只显示图片。添加指标后，指标会显示在图片上方。</string>
     <string name="widget_editor_appearance">外观</string>
     <string name="widget_editor_font_size">文字大小：%1$d sp</string>
-    <string name="widget_editor_opacity">背景不透明度：%1$d%%</string>
+    <string name="widget_editor_opacity">背景透明度：%1$d%%</string>
     <string name="widget_editor_background">背景颜色</string>
     <string name="widget_editor_show_chart">显示图表</string>
-    <string name="widget_editor_show_labels">显示标签和数值</string>
+    <string name="widget_editor_show_labels">显示指标标签</string>
     <string name="widget_editor_strip_coverage">刷新条覆盖范围：%1$d%%</string>
     <string name="widget_editor_strip_wave">波浪幅度：%1$d%%</string>
     <string name="widget_editor_strip_opacity">刷新条透明度：%1$d%%</string>
     <string name="widget_editor_strip_color">刷新条颜色</string>
     <string name="widget_editor_strip_color_auto">默认丝带</string>
-    <string name="widget_editor_strip_hint">完全透明时看不到，但该区域点击仍会触发刷新。</string>
+    <string name="widget_editor_strip_hint">透明度拉满时看不到，但点击左侧该区域仍会刷新。</string>
     <string name="widget_editor_metric_color">自定义颜色</string>
     <string name="widget_editor_metric_color_auto">%1$s：自动颜色</string>
     <string name="widget_editor_refresh_strip">左侧刷新条</string>
     <string name="widget_editor_tap">点按时打开应用</string>
+    <string name="widget_editor_show_value">显示数值</string>
+    <string name="widget_editor_strip_settings">刷新条设置</string>
+    <string name="widget_editor_auto_short">自动</string>
     <string name="widget_editor_search_app">搜索应用</string>
     <string name="tap_shortcut_header">内置跳转</string>
     <string name="tap_shortcut_refresh">刷新小组件</string>
@@ -220,26 +227,11 @@
     <string name="tap_shortcut_insights">总览页</string>
     <string name="tap_shortcut_widgets">小组件管理</string>
     <string name="tap_shortcut_settings">设置页</string>
-    <string name="dev_master_switch">开发者调节</string>
-    <string name="dev_refresh_frames">波浪时长：%1$d 帧</string>
-    <string name="dev_source_layout">概览来源标签位置</string>
-    <string name="dev_source_style">概览来源标签样式</string>
-    <string name="dev_source_style_hint">标签的绘制方式。开启开发者调节后，“不显示”会隐藏所有标签，其余样式在仅健康连接模式下也会强制显示标签，方便组合对比效果。</string>
-    <string name="src_style_text">色点 + 文字</string>
-    <string name="src_style_dot">仅色点</string>
-    <string name="src_style_hidden">不显示</string>
     <string name="settings_overview_spark">概览趋势图位置</string>
     <string name="settings_overview_spark_separated">图表独立展示在数值下方</string>
     <string name="settings_overview_spark_behind">图表衬于标题和数据下层</string>
-    <string name="src_layout_after_title">标题在首行图标后，来源跟标题后</string>
-    <string name="src_layout_after_icon">来源在首行图标后</string>
-    <string name="src_layout_second_start">来源在第二行居左</string>
-    <string name="src_layout_second_end">来源在第二行居右</string>
-    <string name="dev_section">开发者</string>
-    <string name="dev_refresh_speed">刷新波浪动效速度：%1$.1f×</string>
-    <string name="dev_refresh_speed_hint">刷新条波浪动画速度倍率（1× 为原始 90 毫秒/帧，默认 5×）。</string>
-    <string name="widget_tap_default">GarPulse 指标详情</string>
-    <string name="widget_tap_reset">重置</string>
+    <string name="widget_tap_default">不打开任何应用</string>
+    <string name="widget_tap_reset">清空</string>
 
     <!-- 应用内小组件管理 -->
     <string name="widget_manager_title">我的小组件</string>
@@ -289,6 +281,13 @@
     <string name="widget_tap_uri_hint">如 mijia://…</string>
     <string name="widget_tap_uri_use">使用此链接</string>
     <string name="widget_tap_open_failed">无法打开目标页面，已改为打开应用主页</string>
+    <string name="widget_tap_export_apps">导出应用列表（txt）</string>
+    <string name="widget_tap_export_pages">导出页面列表（txt）</string>
+    <string name="widget_tap_export_apps_title">本机可启动的应用列表</string>
+    <string name="widget_tap_export_pages_title">%1$s 的应用内可跳转页面</string>
+    <string name="widget_tap_export_count">共 %1$d 项。格式：名称 | 包名 | 组件</string>
+    <string name="widget_tap_export_done">列表已保存。</string>
+    <string name="widget_tap_export_failed">列表保存失败。</string>
 
     <!-- 灵活尺寸 -->
     <string name="widget_size_title">小组件尺寸</string>
@@ -314,10 +313,10 @@
     <!-- 自适应格子、每格跳转与独立卡片样式 -->
     <string name="widget_editor_layout_hint">网格会根据小组件尺寸和指标数量自动调整，每个格子可单独设置跳转应用。</string>
     <string name="widget_editor_cell_tap">设置应用</string>
-    <string name="widget_editor_tap_hint">此处选择的应用作为未单独设置应用的格子的默认值。</string>
+    <string name="widget_editor_tap_hint">此处选择的应用作为未单独设置应用的格子的默认值。指标格子未单独设置时会打开 GarPulse 的指标详情页；什么都没选择时，点按小组件或图片不会打开任何应用；点击垃圾桶图标可清空选择。</string>
     <string name="widget_editor_font_scale">文字大小微调：%1$d%%</string>
     <string name="widget_editor_card_color">卡片颜色</string>
-    <string name="widget_editor_card_opacity">卡片不透明度：%1$d%%</string>
+    <string name="widget_editor_card_opacity">卡片透明度：%1$d%%</string>
     <string name="widget_size_1x5">1 × 5</string>
     <string name="widget_size_4x5">4 × 5</string>
     <string name="widget_sized_1x5_name">GarPulse 1 × 5</string>
@@ -336,7 +335,7 @@
     <string name="widget_editor_image_selected">已选择图片</string>
     <string name="widget_editor_image_none">无图片</string>
     <string name="widget_editor_image_choose">选择…</string>
-    <string name="widget_editor_image_opacity">图片亮度：%1$d%%</string>
+    <string name="widget_editor_image_opacity">图片透明度：%1$d%%</string>
     <string name="widget_editor_image_hint">图片作为背景：不添加指标时铺满整个小组件，添加指标后指标会显示在图片上层。也可直接点上方空白预览添加图片。</string>
     <string name="widget_editor_preview_add_image">＋ 点击添加图片</string>
     <string name="widget_editor_add_image">添加图片</string>
@@ -396,4 +395,110 @@
     <string name="garmin_api_key_cleared">密钥已清除</string>
     <string name="garmin_api_source_switched">数据来源已更新</string>
     <string name="garmin_api_status_idle">尚未同步</string>
+
+    <!-- 使用说明问号 -->
+    <string name="help_open">使用说明：%1$s</string>
+    <string name="action_got_it">知道了</string>
+    <string name="help_dashboard_title">概览</string>
+    <string name="help_detail_title">指标详情</string>
+    <string name="help_widget_manager_title">我的小组件</string>
+    <string name="help_widget_editor_title">小组件设置</string>
+    <string name="help_widget_preview_title">预览</string>
+    <string name="help_widget_name_title">小组件名称</string>
+    <string name="help_widget_image_title">图片</string>
+    <string name="help_widget_tap_title">点按动作</string>
+    <string name="help_widget_metrics_title">指标</string>
+    <string name="help_widget_appearance_title">外观</string>
+    <string name="help_settings_title">设置</string>
+    <string name="help_settings_data_title">数据</string>
+    <string name="help_settings_source_title">数据来源</string>
+    <string name="help_settings_display_title">显示</string>
+    <string name="help_settings_export_title">导出</string>
+    <string name="help_settings_about_title">关于</string>
+
+    <string-array name="help_dashboard">
+        <item>卡片显示最新数值与趋势；点按卡片进入指标详情。</item>
+        <item>长按任意卡片进入编辑，可拖动排序、隐藏或恢复卡片，改动即时保存。</item>
+        <item>顶栏的调色板按钮同样进入编辑；刷新按钮重新读取健康数据。</item>
+        <item>未授权的卡片会提示前往「数据」设置授权。</item>
+        <item>在设置中可调整每行卡片数量与趋势图显示位置。</item>
+    </string-array>
+    <string-array name="help_detail">
+        <item>顶部显示当前数值；设置过目标时会同时显示完成度。</item>
+        <item>趋势图展示历史变化，下方为统计数据和最近记录。</item>
+        <item>来自佳明或其他已连接来源的数据会带有来源标记。</item>
+        <item>数值按设置中选择的单位系统显示。</item>
+    </string-array>
+    <string-array name="help_widget_manager">
+        <item>点「添加到桌面」先完成设置，桌面会询问放置位置。</item>
+        <item>点列表中的已添加小组件，可重新编辑指标、图片、点按动作与外观。</item>
+        <item>名称仅用于在 GarPulse 内区分小组件，不会显示在桌面。</item>
+        <item>想用照片当入口：给小组件设置图片，并把点按动作设为打开 GarPulse。</item>
+    </string-array>
+    <string-array name="help_widget_editor">
+        <item>从上到下依次为预览、名称、图片、点按动作、指标与外观。</item>
+        <item>每次修改都会即时反映在预览中，保存后同步到桌面。</item>
+        <item>每个分区的问号可查看该分区的详细说明。</item>
+    </string-array>
+    <string-array name="help_widget_preview">
+        <item>预览随指标数量和外观设置实时变化。</item>
+        <item>尺寸由指标数量自动建议；桌面长按小组件可拖动边缘调整大小。</item>
+    </string-array>
+    <string-array name="help_widget_name">
+        <item>名称只用于在 GarPulse 内区分小组件，绝不会显示在桌面。</item>
+        <item>留空则自动使用「种类名 + 序号」；垃圾桶图标可清空。</item>
+    </string-array>
+    <string-array name="help_widget_image">
+        <item>图片作为背景层：没有指标时铺满，有指标时显示在卡片下方。</item>
+        <item>点空白预览或「选择…」添加图片；透明度 100% 表示完全透明。</item>
+        <item>所有拖动条步长为 1%。</item>
+    </string-array>
+    <string-array name="help_widget_tap">
+        <item>可为整个小组件或图片设置点按目标，也可为每个指标格子单独设置。</item>
+        <item>指标格子未单独设置时，会打开 GarPulse 中该指标的详情页。</item>
+        <item>什么都没选时点按背景或图片不会跳转；垃圾桶图标可清空选择。</item>
+        <item>可将应用列表或某个应用的可跳转页面导出为 txt，方便交给 AI 帮你选目标。</item>
+    </string-array>
+    <string-array name="help_widget_metrics">
+        <item>添加指标后推荐尺寸与预览立即更新。</item>
+        <item>点按指标行可选择该指标被点按时打开的应用或页面。</item>
+        <item>刷新条会读取最新健康数据，动效持续到读取完成。</item>
+    </string-array>
+    <string-array name="help_widget_appearance">
+        <item>透明度 100% 为完全透明，0% 为完全不透明；拖动条精度 1%。</item>
+        <item>开关控制来源标签、图表、指标标签、数值与刷新条是否显示。</item>
+        <item>只显示当前存在的元素；缩进的设置项属于它上方的功能。</item>
+        <item>点击色块可更换颜色，选中的色块带外框。</item>
+    </string-array>
+    <string-array name="help_settings">
+        <item>数据：管理授权；数据来源：选择 Health Connect、佳明或双来源。</item>
+        <item>显示：概览列数、趋势图位置、单位、语言与应用 Logo。</item>
+        <item>导出：将可访问的数据保存为 CSV 或 JSON。</item>
+        <item>每个分区标题旁的问号有更详细的说明。</item>
+    </string-array>
+    <string-array name="help_settings_data">
+        <item>「管理数据访问」会打开 Health Connect，可授权或撤销健康数据类型。</item>
+        <item>未授权的卡片会提示回到这里授权。</item>
+        <item>数据保存在本机；除非你主动导出，否则不会上传。</item>
+    </string-array>
+    <string-array name="help_settings_source">
+        <item>自动：读取 Health Connect 聚合数据，包含其他应用同步进来的数据。</item>
+        <item>佳明 API：需填写个人 API 密钥；双来源时由优先级决定采用谁的数据。</item>
+        <item>卡片上的来源标记会显示数值是否来自佳明。</item>
+        <item>密钥不会再次显示；留空保存表示保留原密钥。</item>
+    </string-array>
+    <string-array name="help_settings_display">
+        <item>概览列数可设置 1 到 10 列。</item>
+        <item>趋势图可显示在数值下方，或作为整张卡片的背景。</item>
+        <item>单位与语言即时生效；这里可从六款 Logo 中选择应用图标。</item>
+        <item>想用自己的照片当入口：给小组件设置图片，并把点按动作设为打开 GarPulse。</item>
+    </string-array>
+    <string-array name="help_settings_export">
+        <item>选择 CSV 或 JSON，并保存到你指定的位置。</item>
+        <item>仅导出已授权访问的数据，不会发送到网络。</item>
+    </string-array>
+    <string-array name="help_settings_about">
+        <item>显示应用版本与开源项目地址。</item>
+        <item>本页底部的隐私说明介绍了数据处理方式。</item>
+    </string-array>
 </resources>

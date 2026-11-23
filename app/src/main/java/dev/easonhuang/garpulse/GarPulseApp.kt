@@ -2,7 +2,6 @@ package dev.easonhuang.garpulse
 
 import android.app.Application
 import dev.easonhuang.garpulse.data.DashboardPreferences
-import dev.easonhuang.garpulse.data.DeveloperPreferences
 import dev.easonhuang.garpulse.data.ExportManager
 import dev.easonhuang.garpulse.data.GarminMetricRepository
 import dev.easonhuang.garpulse.data.GarminPersonalApi
@@ -26,7 +25,6 @@ class GarPulseApp : Application() {
     val exporter: ExportManager by lazy { ExportManager(this, healthConnect, units) }
     val dashboardPrefs: DashboardPreferences by lazy { DashboardPreferences(this) }
     val language: LanguagePreferences by lazy { LanguagePreferences(this) }
-    val developerPrefs: DeveloperPreferences by lazy { DeveloperPreferences(this) }
 
     override fun onCreate() {
         super.onCreate()

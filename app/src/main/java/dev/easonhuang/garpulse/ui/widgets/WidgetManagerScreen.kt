@@ -49,12 +49,14 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.easonhuang.garpulse.R
+import dev.easonhuang.garpulse.ui.components.HelpButton
 import dev.easonhuang.garpulse.widget.EXTRA_DRAFT_MODE
 import dev.easonhuang.garpulse.widget.EXTRA_EDIT_ONLY
 import dev.easonhuang.garpulse.widget.MetricWidgetConfigActivity
@@ -73,6 +75,8 @@ fun WidgetManagerScreen(bottomInset: Dp) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     var instances by remember { mutableStateOf<List<WidgetInstance>>(emptyList()) }
+    // Auto names ("Heatmap 2") need to know each widget's position among its own kind.
+    val ordinals = remember(instances) { WidgetCatalog.ordinals(instances) }
 
     suspend fun reload() {
         instances = WidgetCatalog.list(context)
@@ -106,6 +110,9 @@ fun WidgetManagerScreen(bottomInset: Dp) {
         topBar = {
             LargeTopAppBar(
                 title = { Text(stringResource(R.string.widget_manager_title)) },
+                actions = {
+                    HelpButton(R.string.help_widget_manager_title, R.array.help_widget_manager)
+                },
                 scrollBehavior = scrollBehavior,
             )
         },
@@ -180,6 +187,7 @@ fun WidgetManagerScreen(bottomInset: Dp) {
             }
 
             items(instances, key = { it.appWidgetId }) { instance ->
+                val ordinal = ordinals[instance.appWidgetId] ?: 1
                 Card(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
@@ -199,8 +207,10 @@ fun WidgetManagerScreen(bottomInset: Dp) {
                         Column(Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    stringResource(instance.kind.labelRes),
+                                    WidgetCatalog.displayName(context, instance, ordinal),
                                     fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f, fill = false),
                                 )
                                 Spacer(Modifier.size(8.dp))

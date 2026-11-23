@@ -115,6 +115,31 @@ class WidgetConfigTest {
     }
 
     @Test
+    fun `custom name survives prefs and draft round trips`() {
+        val original = WidgetConfig(name = "Home · steps")
+        val prefs = mutablePreferencesOf()
+        WidgetConfigCodec.write(prefs, original)
+        assertEquals("Home · steps", WidgetConfigCodec.read(prefs, WidgetConfig.DEFAULT).name)
+        assertEquals("Home · steps", WidgetConfigCodec.decodeDraft(WidgetConfigCodec.encodeDraft(original))?.name)
+    }
+
+    @Test
+    fun `blank name reads back as null`() {
+        val config = WidgetConfig(name = "   ")
+        val prefs = mutablePreferencesOf()
+        WidgetConfigCodec.write(prefs, config)
+        assertEquals(null, WidgetConfigCodec.read(prefs, WidgetConfig.DEFAULT).name)
+    }
+
+    @Test
+    fun `draft staged before naming decodes with no name`() {
+        // A build that predates naming wrote 26 fields; the missing 27th must default to null.
+        val encoded = WidgetConfigCodec.encodeDraft(WidgetConfig(metrics = listOf(Metric.STEPS)))
+            .split('\u001F').dropLast(1).joinToString('\u001F'.toString())
+        assertEquals(null, WidgetConfigCodec.decodeDraft(encoded)?.name)
+    }
+
+    @Test
     fun `snapshots round trip with points and units`() {
         val states = listOf(
             WidgetMetricState(Metric.STEPS.key, true, "8,432", "steps", listOf(100f, 200f, 150f)),

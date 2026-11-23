@@ -52,6 +52,7 @@ import dev.easonhuang.garpulse.data.formatValue
 import dev.easonhuang.garpulse.data.title
 import dev.easonhuang.garpulse.ui.DetailViewModel
 import dev.easonhuang.garpulse.ui.components.BarChart
+import dev.easonhuang.garpulse.ui.components.HelpButton
 import dev.easonhuang.garpulse.ui.components.LineChart
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,6 +78,9 @@ fun DetailScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
+                },
+                actions = {
+                    HelpButton(R.string.help_detail_title, R.array.help_detail)
                 },
             )
         },

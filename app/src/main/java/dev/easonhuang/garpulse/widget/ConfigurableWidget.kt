@@ -14,6 +14,7 @@ import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
 import androidx.glance.LocalSize
+import androidx.glance.action.Action
 import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
@@ -73,15 +74,37 @@ abstract class ConfigurableWidget : GlanceAppWidget() {
     }
 
     companion object {
+        /**
+         * How long a Health Connect read stays usable for re-renders of the same widget.
+         * Glance re-runs [provideGlance] on every `update()` — including the handful of cheap
+         * frames that animate the refresh strip — so without this a single tap could trigger
+         * five full queries. That cold-start burst could outlive the click broadcast, which made
+         * the first tap of a strip look completely dead while a second (warm) tap worked.
+         */
+        private const val REUSE_DATA_MS = 10_000L
+
         /** Reads config + fresh data for [id] and writes both into its Glance state. */
-        suspend fun refreshData(context: Context, id: GlanceId, defaults: WidgetConfig) {
+        suspend fun refreshData(
+            context: Context,
+            id: GlanceId,
+            defaults: WidgetConfig,
+            /** Re-read even when the cached snapshots are still fresh (an explicit refresh). */
+            force: Boolean = false,
+        ) {
             val app = context.applicationContext as GarPulseApp
             val manager = app.healthConnect
-            val system = app.units.system.first()
             val stateDefinition = PreferencesGlanceStateDefinition
             val stored = getAppWidgetState(context, stateDefinition, id)
             val config = WidgetConfigCodec.read(stored, defaults)
+            val cached = WidgetConfigCodec.decodeSnapshots(stored[WidgetPrefs.SNAPSHOTS])
+            val lastRead = stored[WidgetPrefs.LAST_READ_AT] ?: 0L
+            val cacheCoversMetrics = cached.map { it.metricKey } == config.metrics.map { it.key }
+            if (!force && cacheCoversMetrics && System.currentTimeMillis() - lastRead < REUSE_DATA_MS) {
+                // Nothing to do: the renderer already reads these snapshots from the same state.
+                return
+            }
 
+            val system = app.units.system.first()
             val states = config.metrics.map { metric ->
                 val granted = manager.isGranted(metric)
                 val detail = if (granted) {
@@ -109,6 +132,7 @@ abstract class ConfigurableWidget : GlanceAppWidget() {
                 WidgetConfigCodec.write(mutable, config)
                 mutable[WidgetPrefs.SNAPSHOTS] = WidgetConfigCodec.encodeSnapshots(states)
                 mutable[WidgetPrefs.REFRESH_FRAME] = 0
+                mutable[WidgetPrefs.LAST_READ_AT] = System.currentTimeMillis()
                 mutable
             }
         }
@@ -125,6 +149,14 @@ internal fun widgetTapAction(target: TapTarget, metricKey: String?) =
             WidgetTapAction.KEY_METRIC.to(metricKey ?: ""),
         ),
     )
+
+/**
+ * Same as [widgetTapAction], but returns null when no destination is configured. "No destination"
+ * is a real, supported choice: the element then carries no click handler at all, so a tap is a
+ * deliberate no-op instead of silently opening GarPulse.
+ */
+internal fun widgetTapActionOrNull(target: TapTarget, metricKey: String?): Action? =
+    if (target.isEmpty) null else widgetTapAction(target, metricKey)
 
 /** User-selected text colour, falling back to the metric's own accent colour. */
 internal fun WidgetConfig.textColorFor(metric: Metric?): Color =
@@ -178,15 +210,19 @@ internal fun ConfigurableWidgetContent() {
         .background(ColorProvider(config.effectiveBackground))
         .cornerRadius(24.dp)
 
-    val imageBitmap = WidgetImageStore.load(config.imagePath, maxDimension = (size.width.value * density).toInt().coerceAtLeast(360))
-    val globalTap = widgetTapAction(config.tapFor(config.metrics.firstOrNull()?.key.orEmpty()), null)
+    val imageBitmap = WidgetImageStore
+        .load(config.imagePath, maxDimension = (size.width.value * density).toInt().coerceAtLeast(360))
+        .let { loaded -> loaded?.let { WidgetImageStore.withAlpha(it, config.imageAlpha) } }
+    val globalTap = widgetTapActionOrNull(config.tapFor(config.metrics.firstOrNull()?.key.orEmpty()), null)
 
     // Unified layering: the picture is ALWAYS a full-bleed background. With no metrics it is the
     // whole widget (a photo tile); with metrics their cards float on top. This is one model, so a
     // widget can switch between "photo only" and "photo + data" just by adding/removing metrics.
     // The refresh strip spans the FULL height and overlays the content instead of stealing width.
     Box(modifier = rootModifier) {
-        Box(modifier = GlanceModifier.fillMaxSize().clickable(globalTap)) {
+        var contentModifier = GlanceModifier.fillMaxSize()
+        if (globalTap != null) contentModifier = contentModifier.clickable(globalTap)
+        Box(modifier = contentModifier) {
             if (imageBitmap != null) {
                 Image(
                     provider = ImageProvider(imageBitmap),
@@ -194,16 +230,6 @@ internal fun ConfigurableWidgetContent() {
                     contentScale = ContentScale.Crop,
                     modifier = GlanceModifier.fillMaxSize(),
                 )
-                // Darkening scrim ONLY while metric cards float on top (readability aid). A
-                // photo-only tile is always the untouched original picture. Neutral black, at
-                // half strength so "picture opacity" high = crisp photo, low = dimmed backdrop.
-                if (!states.isEmpty() && config.imageOpacity < 100) {
-                    Box(
-                        modifier = GlanceModifier.fillMaxSize().background(
-                            ColorProvider(Color.Black.copy(alpha = (100 - config.imageOpacity) / 200f)),
-                        ),
-                    ) {}
-                }
             }
             if (states.isEmpty()) {
                 // No metrics: show the picture alone, or a friendly prompt when nothing is set.
@@ -229,7 +255,8 @@ internal fun ConfigurableWidgetContent() {
                         metricCount = states.size.coerceAtLeast(1),
                         fontScale = config.fontScale,
                         showChart = config.showChart,
-                        valueChars = longest,
+                        // Labels-only cells do not need room for digits.
+                        valueChars = if (config.showValue) longest else 3,
                     )
                     AdaptiveGrid(GlanceModifier.fillMaxSize(), config, states, grid, context, density)
                 }
@@ -346,6 +373,9 @@ private fun MetricCell(
     // One card per metric. The chart is a translucent backdrop anchored to the lower part,
     // and the title + number always float above it. Because nothing is stacked vertically,
     // a tall bar can never push the digits out of the cell or clip them at the top.
+    // Always tappable: a configured app wins, otherwise the tap opens this metric's detail page in
+    // GarPulse (resolved inside WidgetTapAction). Only the metric-less widget background/picture
+    // becomes a no-op when nothing is configured.
     Box(
         modifier = modifier
             .background(ColorProvider(config.effectiveCard))
@@ -376,20 +406,30 @@ private fun MetricCell(
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (config.showSource && (!config.showLabels || metric == null)) {
+                    SourceTag(state.source, accent, labelSp.sp, context)
+                    Spacer(GlanceModifier.height(2.dp))
+                }
                 if (config.showLabels && metric != null) {
-                    Text(
-                        text = metric.title(context),
-                        maxLines = 1,
-                        style = TextStyle(
-                            color = ColorProvider(accent),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = labelSp.sp,
-                        ),
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = metric.title(context),
+                            maxLines = 1,
+                            style = TextStyle(
+                                color = ColorProvider(accent),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = labelSp.sp,
+                            ),
+                        )
+                        if (config.showSource) {
+                            Spacer(GlanceModifier.width(4.dp))
+                            SourceTag(state.source, accent, (labelSp * 0.8f).sp, context)
+                        }
+                    }
                     Spacer(GlanceModifier.height(2.dp))
                 }
                 if (state.granted) {
-                    ValueRow(state.value, state.unit, accent, bodySp.sp)
+                    if (config.showValue) ValueRow(state.value, state.unit, accent, bodySp.sp)
                 } else {
                     Text(
                         text = context.getString(R.string.widget_tap_to_connect),
@@ -398,20 +438,32 @@ private fun MetricCell(
                 }
             }
         }
-        // Optional source tag: a small colour-coded dot in the corner (teal = synced, blue =
-        // Garmin). Kept tiny so it never competes with the number, matching the home-screen badge.
-        if (config.showSource) {
-            Box(GlanceModifier.fillMaxSize(), contentAlignment = Alignment.TopEnd) {
-                Box(
-                    GlanceModifier
-                        .padding(2.dp)
-                        .width(8.dp)
-                        .height(8.dp)
-                        .background(ColorProvider(state.source.badgeColor))
-                        .cornerRadius(4.dp),
-                ) {}
-            }
-        }
+    }
+}
+
+/**
+ * The source tag: a colour dot plus the short source name (teal = Health Connect, blue = Garmin).
+ * Colour carries the meaning at a glance, the word keeps it unambiguous — never colour alone.
+ */
+@Composable
+private fun SourceTag(source: dev.easonhuang.garpulse.data.ValueSource, accent: Color, size: androidx.compose.ui.unit.TextUnit, context: Context) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            GlanceModifier
+                .width(6.dp)
+                .height(6.dp)
+                .background(ColorProvider(source.badgeColor))
+                .cornerRadius(3.dp),
+        ) {}
+        Spacer(GlanceModifier.width(3.dp))
+        Text(
+            text = context.getString(source.shortRes),
+            maxLines = 1,
+            style = TextStyle(
+                color = ColorProvider(source.badgeColor.copy(alpha = 0.9f)),
+                fontSize = size,
+            ),
+        )
     }
 }
 
@@ -456,8 +508,9 @@ private fun IconGrid(
                     Text(
                         text = metricGlyph(state.metricKey),
                         style = TextStyle(color = ColorProvider(color), fontSize = grid.bodySp.sp),
-                        modifier = GlanceModifier.defaultWeight()
-                            .clickable(widgetTapAction(config.tapFor(state.metricKey), state.metricKey)),
+                        modifier = GlanceModifier.defaultWeight().clickable(
+                            widgetTapAction(config.tapFor(state.metricKey), state.metricKey),
+                        ),
                     )
                 }
             }

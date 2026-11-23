@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#1B6C5E</color>
+    <color name="ic_launcher_background">#FFF6EF</color>
+    <color name="ic_launcher_background_heart">#FFF2EF</color>
+    <color name="ic_launcher_background_ribbon">#EAFBFB</color>
+    <color name="ic_launcher_background_watch">#EAFAF0</color>
+    <color name="ic_launcher_background_stopwatch">#FFF8E4</color>
+    <color name="ic_launcher_background_diamond">#FFF4E6</color>
     <color name="splash_bg">#0E1513</color>
 </resources>

@@ -57,9 +57,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.easonhuang.garpulse.GarPulseApp
 import dev.easonhuang.garpulse.R
 import dev.easonhuang.garpulse.data.DashboardLayout
-import dev.easonhuang.garpulse.data.DeveloperPreferences
-import dev.easonhuang.garpulse.data.SourceBadgeLayout
-import dev.easonhuang.garpulse.data.SourceBadgeStyle
 import dev.easonhuang.garpulse.data.DashboardPreferences
 import dev.easonhuang.garpulse.data.UnitPreferences
 import dev.easonhuang.garpulse.data.HealthConnectManager
@@ -68,6 +65,7 @@ import dev.easonhuang.garpulse.data.MetricSource
 import dev.easonhuang.garpulse.data.MetricSummary
 import dev.easonhuang.garpulse.data.title
 import dev.easonhuang.garpulse.ui.DashboardViewModel
+import dev.easonhuang.garpulse.ui.components.HelpButton
 import dev.easonhuang.garpulse.ui.components.MetricCard
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
@@ -94,20 +92,8 @@ fun DashboardScreen(
     // Health-Connect-only view stays visually calm.
     val showSourceBadges = sourceState?.source == MetricSource.AUTO ||
         sourceState?.source == MetricSource.GARMIN_API
-    val sourceBadgeLayout by app.developerPrefs.sourceBadgeLayout.collectAsStateWithLifecycle(
-        initialValue = SourceBadgeLayout.AFTER_TITLE,
-    )
-    val devEnabled by app.developerPrefs.enabled.collectAsStateWithLifecycle(
-        initialValue = DeveloperPreferences.DEFAULT_ENABLED,
-    )
-    val sourceBadgeStyle by app.developerPrefs.sourceBadgeStyle.collectAsStateWithLifecycle(
-        initialValue = SourceBadgeStyle.TEXT,
-    )
     val sparkBehind by dashboardPrefs.sparkBehind.collectAsStateWithLifecycle(initialValue = false)
-    // With developer tuning on, the badge style fully controls visibility (including forcing
-    // badges in Health-Connect-only mode for A/B comparison); otherwise the auto rule applies.
-    val effectiveShowSource = if (devEnabled) sourceBadgeStyle != SourceBadgeStyle.HIDDEN else showSourceBadges
-    val effectiveSourceStyle = if (devEnabled) sourceBadgeStyle else SourceBadgeStyle.TEXT
+    val effectiveShowSource = showSourceBadges
     val vm: DashboardViewModel = viewModel(
         factory = DashboardViewModel.factory(manager, dashboardPrefs, units, app.metricSource),
     )
@@ -134,6 +120,7 @@ fun DashboardScreen(
                     Text(stringResource(if (editing) R.string.dashboard_edit_title else R.string.app_name))
                 },
                 actions = {
+                    HelpButton(R.string.help_dashboard_title, R.array.help_dashboard)
                     if (editing) {
                         IconButton(onClick = { editing = false }) {
                             Icon(Icons.Rounded.Check, contentDescription = stringResource(R.string.action_done))
@@ -164,7 +151,7 @@ fun DashboardScreen(
             val all = allSummaries
             val stored = layout
             if (all != null && stored != null) {
-                EditGrid(all, stored, contentPadding, gridColumns, showSource = effectiveShowSource, sourceLayout = sourceBadgeLayout, sourceStyle = effectiveSourceStyle, sparkBehind = sparkBehind, onSave = vm::saveLayout)
+                EditGrid(all, stored, contentPadding, gridColumns, showSource = effectiveShowSource, sparkBehind = sparkBehind, onSave = vm::saveLayout)
             }
             return@Scaffold
         }
@@ -187,8 +174,6 @@ fun DashboardScreen(
                     },
                     onLongClick = startEditing,
                     showSource = effectiveShowSource,
-                    sourceLayout = sourceBadgeLayout,
-                    sourceStyle = effectiveSourceStyle,
                     sparkBehind = sparkBehind,
                 )
             }
@@ -203,8 +188,6 @@ private fun EditGrid(
     contentPadding: PaddingValues,
     gridColumns: Int,
     showSource: Boolean,
-    sourceLayout: SourceBadgeLayout,
-    sourceStyle: SourceBadgeStyle,
     sparkBehind: Boolean,
     onSave: (order: List<Metric>, hidden: Set<Metric>) -> Unit,
 ) {
@@ -269,8 +252,6 @@ private fun EditGrid(
                     summary = all[metric] ?: MetricSummary(metric, "-", null, hasData = false, granted = true),
                     hidden = false,
                     showSource = showSource,
-                    sourceLayout = sourceLayout,
-                    sourceStyle = sourceStyle,
                     sparkBehind = sparkBehind,
                     onToggle = { hide(metric) },
                     onMoveEarlier = { move(metric, -1) },
@@ -299,8 +280,6 @@ private fun EditGrid(
                     summary = all[metric] ?: MetricSummary(metric, "-", null, hasData = false, granted = true),
                     hidden = true,
                     showSource = showSource,
-                    sourceLayout = sourceLayout,
-                    sourceStyle = sourceStyle,
                     sparkBehind = sparkBehind,
                     onToggle = { show(metric) },
                 )
@@ -319,8 +298,6 @@ private fun EditableCard(
     summary: MetricSummary,
     hidden: Boolean,
     showSource: Boolean,
-    sourceLayout: SourceBadgeLayout,
-    sourceStyle: SourceBadgeStyle,
     sparkBehind: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
@@ -346,8 +323,6 @@ private fun EditableCard(
             summary = summary,
             onClick = if (hidden) onToggle else ({}),
             showSource = showSource,
-            sourceLayout = sourceLayout,
-            sourceStyle = sourceStyle,
             sparkBehind = sparkBehind,
             modifier = Modifier
                 .fillMaxWidth()

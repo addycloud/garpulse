@@ -19,10 +19,9 @@ import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.state.PreferencesGlanceStateDefinition
 import kotlin.math.PI
 import kotlin.math.sin
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
-
-import dev.easonhuang.garpulse.data.DeveloperPreferences
+import kotlinx.coroutines.launch
 
 /**
  * A slim wavy ribbon drawn on the left edge of a widget. Tapping it refreshes that widget only;
@@ -30,10 +29,12 @@ import dev.easonhuang.garpulse.data.DeveloperPreferences
  * a few cheap updates produce a subtle "working" animation without a full re-bind.
  */
 internal object WidgetRefreshStrip {
-    const val FRAME_COUNT = 4
+    /** The wave runs for exactly one second per loop, painted in ten 100 ms frames. */
+    const val FRAME_COUNT = 10
+    const val FRAME_DELAY_MS = 100L
 
-    /** Delay per animation frame at 1× speed; the developer setting multiplies this. */
-    const val BASE_FRAME_DELAY_MS = 90L
+    /** Safety cap: if a read somehow hangs, the wave stops instead of spinning forever. */
+    const val MAX_WAVE_MS = 15_000L
 
     /**
      * Animates the wave and then asks the normal worker to re-read health data. Shared by the
@@ -52,24 +53,35 @@ internal object WidgetRefreshStrip {
         }
         val widget = provider?.let { WidgetCatalog.widgetFor(it) }
 
-        // Developer tuning, gated by the master switch: speed multiplier (1× = the original
-        // gentle wave) and frame count (the wave's total duration is frames × per-frame delay).
-        val dev = DeveloperPreferences(app)
-        val devEnabled = dev.enabled.first()
-        val speed = if (devEnabled) dev.refreshAnimSpeed.first() else DeveloperPreferences.DEFAULT_SPEED
-        val frames = if (devEnabled) dev.refreshAnimFrames.first() else DeveloperPreferences.DEFAULT_FRAMES
-        val delayMs = (BASE_FRAME_DELAY_MS / speed).toLong().coerceAtLeast(8L)
+        // The wave runs WHILE the data is being read, not for a fixed duration first: the read
+        // starts immediately in parallel, the wave loops until it finishes, and the moment fresh
+        // numbers land the wave settles back to its resting frame and they are painted. Reading
+        // before animating is what made the first tap of a cold widget appear to do nothing.
+        coroutineScope {
+            val read = widget?.let {
+                launch { ConfigurableWidget.refreshData(app, glanceId, WidgetCatalog.defaultsFor(provider), force = true) }
+            }
+            if (read == null) {
+                // Could not resolve this widget's provider: fall back to the normal worker.
+                WidgetUpdateScheduler.refreshNow(app)
+                return@coroutineScope
+            }
 
-        setFrame(app, glanceId, 0)
-        widget?.update(app, glanceId)
-        repeat(frames) { frame ->
-            delay(delayMs)
-            setFrame(app, glanceId, frame + 1)
-            widget?.update(app, glanceId)
+            setFrame(app, glanceId, 0)
+            widget.update(app, glanceId)
+            var frame = 0
+            var elapsed = 0L
+            while (read.isActive && elapsed < MAX_WAVE_MS) {
+                delay(FRAME_DELAY_MS)
+                elapsed += FRAME_DELAY_MS
+                frame = (frame + 1) % FRAME_COUNT
+                setFrame(app, glanceId, frame)
+                widget.update(app, glanceId)
+            }
+            read.join()
+            setFrame(app, glanceId, 0)
+            widget.update(app, glanceId)
         }
-        setFrame(app, glanceId, 0)
-        widget?.update(app, glanceId)
-        WidgetUpdateScheduler.refreshNow(app)
     }
 
     private suspend fun setFrame(context: Context, glanceId: GlanceId, frame: Int) {

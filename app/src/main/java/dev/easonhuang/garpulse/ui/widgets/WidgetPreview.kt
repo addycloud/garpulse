@@ -3,6 +3,7 @@ package dev.easonhuang.garpulse.ui.widgets
 import android.content.Context
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -94,20 +95,15 @@ fun WidgetPreviewCard(
         // are drawn on top, and the strip spans the full height.
         Box(Modifier.fillMaxWidth().height(height).padding(6.dp)) {
             if (imageBitmap != null) {
+                // Same one-mechanism model as the real widget: transparency is baked into the
+                // picture itself, so what the preview shows is exactly what the launcher shows.
                 Image(
                     bitmap = imageBitmap.asImageBitmap(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
+                    alpha = config.imageAlpha,
                     modifier = Modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(14.dp)),
                 )
-                // Mirrors the real widget: scrim only with metrics on top, neutral black, half strength.
-                if (states.isNotEmpty() && config.imageOpacity < 100) {
-                    Box(
-                        Modifier.fillMaxWidth().height(height)
-                            .background(Color.Black.copy(alpha = (100 - config.imageOpacity) / 200f))
-                            .clip(RoundedCornerShape(14.dp)),
-                    )
-                }
             }
             if (states.isEmpty()) {
                 Box(Modifier.fillMaxWidth().height(height), contentAlignment = Alignment.Center) {
@@ -154,7 +150,7 @@ fun WidgetPreviewCard(
                     metricCount = states.size.coerceAtLeast(1),
                     fontScale = config.fontScale,
                     showChart = config.showChart,
-                    valueChars = longest,
+                    valueChars = if (config.showValue) longest else 3,
                 )
                 Column {
                     grid.cells.chunked(grid.columns).forEach { row ->
@@ -170,17 +166,30 @@ fun WidgetPreviewCard(
                     }
                 }
             }
-            if (config.showRefreshStrip) {
+        }
+        if (config.showRefreshStrip) {
+            // Mirror the renderer exactly: a sibling of the content that spans the FULL height
+            // from the left edge, width = coverage, colour/alpha = strip colour and transparency.
+            // Otherwise the preview lies about the settings the user is actively dragging.
+            val coverage = config.stripCoverage.coerceIn(
+                WidgetConfig.MIN_STRIP_COVERAGE, WidgetConfig.MAX_STRIP_COVERAGE,
+            ) / 100f
+            val stripWidth = (width.value * coverage).coerceAtLeast(2f)
+            val base = config.stripColor ?: Color.White
+            val opacity = config.stripOpacity.coerceIn(0, 100) / 100f
+            val alpha = if (config.stripColor != null) base.alpha * opacity else opacity
+            if (alpha > 0f) {
                 Image(
                     bitmap = WidgetRefreshStrip.bitmap(
-                        colorArgb = Color.White.copy(alpha = 0.26f).toArgb(),
-                        widthPx = 36,
+                        colorArgb = base.copy(alpha = alpha).toArgb(),
+                        widthPx = (stripWidth * 3f).toInt().coerceAtLeast(6),
                         heightPx = (height.value * 3f).toInt().coerceAtLeast(8),
                         phase = 0,
+                        wave = config.stripWave,
                     ).asImageBitmap(),
                     contentDescription = null,
                     contentScale = ContentScale.FillBounds,
-                    modifier = Modifier.width(6.dp).height(height),
+                    modifier = Modifier.width(stripWidth.dp).height(height),
                 )
             }
         }
@@ -226,25 +235,51 @@ private fun PreviewMetricCell(
             Modifier.fillMaxWidth().align(Alignment.TopStart),
             horizontalAlignment = Alignment.Start,
         ) {
+            if (config.showSource && (!config.showLabels || metric == null)) {
+                PreviewSourceTag(state.source, (labelSp * 0.8f).sp)
+                Spacer(Modifier.height(2.dp))
+            }
             if (config.showLabels && metric != null) {
-                Text(
-                    metric.title,
-                    color = color,
-                    fontSize = labelSp.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        metric.title,
+                        color = color,
+                        fontSize = labelSp.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (config.showSource) {
+                        Spacer(Modifier.width(4.dp))
+                        PreviewSourceTag(state.source, (labelSp * 0.8f).sp)
+                    }
+                }
                 Spacer(Modifier.height(2.dp))
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(state.value, color = color, fontSize = bodySp.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                if (state.unit.isNotBlank()) {
-                    Spacer(Modifier.width(3.dp))
-                    Text(state.unit, color = color.copy(alpha = 0.8f), fontSize = (bodySp * 0.55f).sp, maxLines = 1)
+                if (config.showValue) {
+                    Text(state.value, color = color, fontSize = bodySp.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    if (state.unit.isNotBlank()) {
+                        Spacer(Modifier.width(3.dp))
+                        Text(state.unit, color = color.copy(alpha = 0.8f), fontSize = (bodySp * 0.55f).sp, maxLines = 1)
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PreviewSourceTag(source: dev.easonhuang.garpulse.data.ValueSource, size: androidx.compose.ui.unit.TextUnit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(6.dp).clip(CircleShape).background(source.badgeColor))
+        Spacer(Modifier.width(3.dp))
+        Text(
+            stringResource(source.shortRes),
+            color = source.badgeColor.copy(alpha = 0.9f),
+            fontSize = size,
+            maxLines = 1,
+        )
     }
 }
 

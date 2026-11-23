@@ -41,7 +41,10 @@ data class WidgetConfig(
     val metrics: List<Metric> = listOf(Metric.STEPS),
     val layout: WidgetLayout = WidgetLayout.SINGLE,
     val showChart: Boolean = true,
+    /** Show each metric's name label (independent of [showValue]). */
     val showLabels: Boolean = true,
+    /** Show each metric's number (and unit); independent of the name label. */
+    val showValue: Boolean = true,
     /** Show the tappable wavy refresh ribbon on the widget's left edge. */
     val showRefreshStrip: Boolean = true,
     /** Fine-tuning multiplier for the automatically cell-sized font (0.6 .. 1.6). */
@@ -70,8 +73,11 @@ data class WidgetConfig(
     val tapTargets: Map<String, TapTarget> = emptyMap(),
     /** Internal-file path of a user-selected picture shown in the widget. Null = no picture. */
     val imagePath: String? = null,
-    /** Opacity (0..100) of the picture when used as a backdrop behind metric cards. */
-    val imageOpacity: Int = 60,
+    /**
+     * Opacity (0..100) of the picture. RemoteViews cannot set view alpha, so this is baked into
+     * the bitmap itself (see [WidgetImageStore.withAlpha]) — same mechanism everywhere.
+     */
+    val imageOpacity: Int = 100,
     /** Show a small colour-coded data-source tag on each metric card. */
     val showSource: Boolean = false,
     /** Refresh-strip coverage of the widget width from the left edge, 5..100 (%). */
@@ -84,12 +90,31 @@ data class WidgetConfig(
     val stripWave: Float = 1f,
     /** Per-metric colour overrides keyed by [Metric.key]; missing keys use the metric accent. */
     val metricColors: Map<String, Color> = emptyMap(),
+    /**
+     * User-supplied name for this placement, so several widgets that share a layout stay
+     * distinguishable in the in-app manager and the editor title. Blank falls back to the widget
+     * kind plus an ordinal.
+     */
+    val name: String? = null,
 ) {
     val effectiveBackground: Color
         get() = backgroundColor.copy(alpha = (backgroundOpacity.coerceIn(0, 100) / 100f))
 
     val effectiveCard: Color
         get() = cardColor.copy(alpha = (cardOpacity.coerceIn(0, 100) / 100f))
+
+    /**
+     * Every opacity in this class is stored as "100 = fully opaque" (what the renderer needs),
+     * while the editor exposes the exact opposite scale — transparency, where 100 = invisible.
+     * These helpers keep both sides of that conversion in one place so they can never drift.
+     */
+    val backgroundTransparency: Int get() = 100 - backgroundOpacity.coerceIn(0, 100)
+    val cardTransparency: Int get() = 100 - cardOpacity.coerceIn(0, 100)
+    val imageTransparency: Int get() = 100 - imageOpacity.coerceIn(0, 100)
+    val stripTransparency: Int get() = 100 - stripOpacity.coerceIn(0, 100)
+
+    /** Picture alpha actually painted, derived from the stored opacity. */
+    val imageAlpha: Float get() = imageOpacity.coerceIn(0, 100) / 100f
 
     /** Per-metric target first, then the global one. */
     fun tapFor(metricKey: String): TapTarget =
@@ -139,13 +164,17 @@ data class WidgetMetricState(
 
 /** Preference keys shared by the renderer, config activity and in-app widget manager. */
 internal object WidgetPrefs {
+    val NAME = stringPreferencesKey("widget_name")
     val METRICS = stringPreferencesKey("widget_metrics")
     val LAYOUT = stringPreferencesKey("widget_layout")
     val SHOW_CHART = booleanPreferencesKey("widget_show_chart")
     val SHOW_LABELS = booleanPreferencesKey("widget_show_labels")
+    val SHOW_VALUE = booleanPreferencesKey("widget_show_value")
     val SHOW_REFRESH_STRIP = booleanPreferencesKey("widget_show_refresh_strip")
     /** Transient animation phase; overwritten on every refresh, never part of WidgetConfig. */
     val REFRESH_FRAME = intPreferencesKey("widget_refresh_frame")
+    /** Epoch millis of the last Health Connect read, so re-renders can reuse cached snapshots. */
+    val LAST_READ_AT = longPreferencesKey("widget_last_read_at")
     val FONT_SCALE = floatPreferencesKey("widget_font_scale")
     val FONT_SIZE = intPreferencesKey("widget_font_size")
     val BG_COLOR = longPreferencesKey("widget_bg_color")
@@ -183,10 +212,12 @@ private const val NO_TEXT_COLOR = -1L
 /** Stable serialisation for Glance Preferences (strings only, no Android resources involved). */
 internal object WidgetConfigCodec {
     fun write(prefs: MutablePreferences, config: WidgetConfig) {
+        prefs[WidgetPrefs.NAME] = config.name?.trim()?.takeIf { it.isNotBlank() } ?: ""
         prefs[WidgetPrefs.METRICS] = config.metrics.joinToString(",") { it.key }
         prefs[WidgetPrefs.LAYOUT] = config.layout.key
         prefs[WidgetPrefs.SHOW_CHART] = config.showChart
         prefs[WidgetPrefs.SHOW_LABELS] = config.showLabels
+        prefs[WidgetPrefs.SHOW_VALUE] = config.showValue
         prefs[WidgetPrefs.SHOW_REFRESH_STRIP] = config.showRefreshStrip
         prefs[WidgetPrefs.FONT_SCALE] = config.fontScale.coerceIn(
             WidgetConfig.MIN_FONT_SCALE,
@@ -240,6 +271,7 @@ internal object WidgetConfigCodec {
             layout = prefs[WidgetPrefs.LAYOUT]?.let(WidgetLayout::fromKey) ?: defaults.layout,
             showChart = prefs[WidgetPrefs.SHOW_CHART] ?: defaults.showChart,
             showLabels = prefs[WidgetPrefs.SHOW_LABELS] ?: defaults.showLabels,
+            showValue = prefs[WidgetPrefs.SHOW_VALUE] ?: defaults.showValue,
             showRefreshStrip = prefs[WidgetPrefs.SHOW_REFRESH_STRIP] ?: defaults.showRefreshStrip,
             fontScale = (prefs[WidgetPrefs.FONT_SCALE] ?: defaults.fontScale).coerceIn(
                 WidgetConfig.MIN_FONT_SCALE,
@@ -277,6 +309,7 @@ internal object WidgetConfigCodec {
                 WidgetConfig.MIN_STRIP_WAVE, WidgetConfig.MAX_STRIP_WAVE,
             ),
             metricColors = decodeMetricColors(prefs[WidgetPrefs.METRIC_COLORS]).ifEmpty { defaults.metricColors },
+            name = prefs[WidgetPrefs.NAME]?.takeIf { it.isNotBlank() } ?: defaults.name,
         )
     }
 
@@ -311,6 +344,8 @@ internal object WidgetConfigCodec {
         (config.stripColor?.toArgbLong() ?: NO_ACCENT).toString(),
         config.stripWave.toString(),
         encodeMetricColors(config.metricColors),
+        if (config.showValue) "1" else "0",
+        config.name.orEmpty(),
     ).joinToString(FIELD.toString())
 
     fun decodeDraft(raw: String?): WidgetConfig? {
@@ -350,6 +385,9 @@ internal object WidgetConfigCodec {
                 stripWave = (f.getOrNull(23)?.toFloatOrNull() ?: 1f)
                     .coerceIn(WidgetConfig.MIN_STRIP_WAVE, WidgetConfig.MAX_STRIP_WAVE),
                 metricColors = decodeMetricColors(f.getOrNull(24)),
+                // Added later: drafts staged by an older build simply keep the default.
+                showValue = f.getOrNull(25)?.let { it == "1" } ?: true,
+                name = f.getOrNull(26)?.trim()?.ifBlank { null },
             )
         }.getOrNull()
     }

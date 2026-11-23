@@ -1,20 +1,18 @@
 package dev.easonhuang.garpulse.ui.settings
 
 import android.app.Activity
+import androidx.annotation.ArrayRes
+import androidx.annotation.ColorRes
+import androidx.annotation.DrawableRes
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.core.content.pm.ShortcutInfoCompat
-import androidx.core.content.pm.ShortcutManagerCompat
-import androidx.core.graphics.drawable.IconCompat
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
@@ -29,9 +27,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.AcUnit
@@ -85,10 +85,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.LocalResources
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -105,15 +108,13 @@ import dev.easonhuang.garpulse.data.ExportFormat
 import dev.easonhuang.garpulse.data.ExportManager
 import dev.easonhuang.garpulse.data.AppLanguage
 import dev.easonhuang.garpulse.data.DashboardPreferences
-import dev.easonhuang.garpulse.data.DeveloperPreferences
 import dev.easonhuang.garpulse.data.HealthConnectManager
-import dev.easonhuang.garpulse.data.SourceBadgeLayout
-import dev.easonhuang.garpulse.data.SourceBadgeStyle
 import dev.easonhuang.garpulse.data.LanguagePreferences
 import dev.easonhuang.garpulse.data.Metric
 import dev.easonhuang.garpulse.data.MetricSource
 import dev.easonhuang.garpulse.data.UnitPreferences
 import dev.easonhuang.garpulse.data.UnitSystem
+import dev.easonhuang.garpulse.ui.components.HelpButton
 import dev.easonhuang.garpulse.widget.WidgetUpdateScheduler
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -131,13 +132,23 @@ private const val GARMIN_KEY_URL = "https://developer.garmin.com/garmin-connect-
 /** Persistent, on-screen outcome of the Garmin connection test. */
 private data class TestResult(val success: Boolean, val message: String)
 
-/** The three launcher-icon variants, each an activity alias carrying the LAUNCHER intent-filter.
- *  The base [dev.easonhuang.garpulse.MainActivity] is never a launcher component and never
- *  disabled, so explicit-component intents (widget taps, deep links) always keep working. */
-private enum class LauncherIcon(val component: String, @StringRes val labelRes: Int) {
-    DEFAULT("dev.easonhuang.garpulse.GarPulseIconDefault", R.string.icon_default),
-    DARK("dev.easonhuang.garpulse.GarPulseIconDark", R.string.icon_dark),
-    LIGHT("dev.easonhuang.garpulse.GarPulseIconLight", R.string.icon_light),
+/** The six selectable launcher logos, each an activity alias carrying the LAUNCHER intent-filter.
+ *  The Dark/Light alias names are retained for upgrade compatibility; they now carry the heart
+ *  and ribbon marks. The base [dev.easonhuang.garpulse.MainActivity] is never a launcher
+ *  component and never disabled, so explicit-component intents (widget taps, deep links)
+ *  always keep working. */
+private enum class LauncherIcon(
+    val component: String,
+    @StringRes val labelRes: Int,
+    @DrawableRes val foregroundRes: Int,
+    @ColorRes val backgroundRes: Int,
+) {
+    DEFAULT("dev.easonhuang.garpulse.GarPulseIconDefault", R.string.icon_default, R.drawable.ic_launcher_foreground, R.color.ic_launcher_background),
+    HEART("dev.easonhuang.garpulse.GarPulseIconDark", R.string.icon_heart, R.drawable.ic_launcher_heart_foreground, R.color.ic_launcher_background_heart),
+    RIBBON("dev.easonhuang.garpulse.GarPulseIconLight", R.string.icon_ribbon, R.drawable.ic_launcher_ribbon_foreground, R.color.ic_launcher_background_ribbon),
+    WATCH("dev.easonhuang.garpulse.GarPulseIconWatch", R.string.icon_watch, R.drawable.ic_launcher_watch_foreground, R.color.ic_launcher_background_watch),
+    STOPWATCH("dev.easonhuang.garpulse.GarPulseIconStopwatch", R.string.icon_stopwatch, R.drawable.ic_launcher_stopwatch_foreground, R.color.ic_launcher_background_stopwatch),
+    DIAMOND("dev.easonhuang.garpulse.GarPulseIconDiamond", R.string.icon_diamond, R.drawable.ic_launcher_diamond_foreground, R.color.ic_launcher_background_diamond),
 }
 
 /** The icon variant currently enabled for the launcher (aliases default to disabled). */
@@ -159,20 +170,6 @@ private fun applyLauncherIcon(context: Context, icon: LauncherIcon) {
         }
         runCatching { pm.setComponentEnabledSetting(component, state, PackageManager.DONT_KILL_APP) }
     }
-}
-
-/** Decodes [uri] and pins a home-screen shortcut to GarPulse carrying the image as its icon. */
-private suspend fun pinCustomIconShortcut(context: Context, uri: Uri): Boolean = withContext(Dispatchers.IO) {
-    val resolver = context.contentResolver
-    val bitmap = resolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it) }
-        ?: return@withContext false
-    val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return@withContext false
-    val shortcut = ShortcutInfoCompat.Builder(context, "custom_icon_${System.currentTimeMillis()}")
-        .setShortLabel(context.getString(R.string.app_name))
-        .setIcon(IconCompat.createWithBitmap(bitmap))
-        .setIntent(launch)
-        .build()
-    ShortcutManagerCompat.requestPinShortcut(context, shortcut, null)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -198,21 +195,7 @@ fun SettingsScreen(
     var showSourceDialog by remember { mutableStateOf(false) }
     var showColumnsDialog by remember { mutableStateOf(false) }
     var showIconDialog by remember { mutableStateOf(false) }
-    val currentIcon = remember { currentLauncherIcon(context) }
-
-    // Picking an arbitrary image cannot change the launcher's app icon directly (Android only
-    // allows static manifest icons), so the custom option pins a home-screen shortcut that
-    // opens GarPulse and carries the chosen image as its icon.
-    val customIconLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            scope.launch {
-                val ok = runCatching { pinCustomIconShortcut(context, uri) }.isSuccess
-                snackbar.showSnackbar(
-                    resources.getString(if (ok) R.string.icon_custom_applied else R.string.icon_custom_failed),
-                )
-            }
-        }
-    }
+    var currentIcon by remember { mutableStateOf(currentLauncherIcon(context)) }
     val overviewColumns by dashboardPrefs.columns.collectAsStateWithLifecycle(
         initialValue = DashboardPreferences.DEFAULT_COLUMNS,
     )
@@ -220,21 +203,6 @@ fun SettingsScreen(
 
     val app = context.applicationContext as GarPulseApp
     val sourceState by app.metricSource.state.collectAsStateWithLifecycle(initialValue = null)
-    val devSpeedCollect by app.developerPrefs.refreshAnimSpeed.collectAsStateWithLifecycle(
-        initialValue = DeveloperPreferences.DEFAULT_SPEED,
-    )
-    val devFramesCollect by app.developerPrefs.refreshAnimFrames.collectAsStateWithLifecycle(
-        initialValue = DeveloperPreferences.DEFAULT_FRAMES,
-    )
-    val devEnabledCollect by app.developerPrefs.enabled.collectAsStateWithLifecycle(
-        initialValue = DeveloperPreferences.DEFAULT_ENABLED,
-    )
-    val devLayoutCollect by app.developerPrefs.sourceBadgeLayout.collectAsStateWithLifecycle(
-        initialValue = SourceBadgeLayout.AFTER_TITLE,
-    )
-    val devStyleCollect by app.developerPrefs.sourceBadgeStyle.collectAsStateWithLifecycle(
-        initialValue = SourceBadgeStyle.TEXT,
-    )
     val sparkBehindCollect by dashboardPrefs.sparkBehind.collectAsStateWithLifecycle(initialValue = false)
     val hasSavedKey = sourceState?.hasKey == true
     // The key is never pre-filled into a visible field. Editing starts from blank; leaving the
@@ -328,7 +296,13 @@ fun SettingsScreen(
 
     Scaffold(
         modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = { LargeTopAppBar(title = { Text(stringResource(R.string.nav_settings)) }, scrollBehavior = scrollBehavior) },
+        topBar = {
+            LargeTopAppBar(
+                title = { Text(stringResource(R.string.nav_settings)) },
+                actions = { HelpButton(R.string.help_settings_title, R.array.help_settings) },
+                scrollBehavior = scrollBehavior,
+            )
+        },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { inner ->
         LazyColumn(
@@ -336,7 +310,13 @@ fun SettingsScreen(
             contentPadding = PaddingValues(top = inner.calculateTopPadding(), bottom = bottomInset + 24.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            item { SectionLabel(stringResource(R.string.settings_section_data)) }
+            item {
+                SectionLabel(
+                    stringResource(R.string.settings_section_data),
+                    R.string.help_settings_data_title,
+                    R.array.help_settings_data,
+                )
+            }
             item {
                 SettingsCard {
                     SettingRow(
@@ -356,7 +336,13 @@ fun SettingsScreen(
                     )
                 }
             }
-            item { SectionLabel(stringResource(R.string.settings_data_source)) }
+            item {
+                SectionLabel(
+                    stringResource(R.string.settings_data_source),
+                    R.string.help_settings_source_title,
+                    R.array.help_settings_source,
+                )
+            }
             item {
                 SettingsCard {
                     val selected = sourceState?.source ?: MetricSource.HEALTH_CONNECT
@@ -541,7 +527,13 @@ fun SettingsScreen(
                     }
                 }
             }
-            item { SectionLabel(stringResource(R.string.settings_section_display)) }
+            item {
+                SectionLabel(
+                    stringResource(R.string.settings_section_display),
+                    R.string.help_settings_display_title,
+                    R.array.help_settings_display,
+                )
+            }
             item {
                 SettingsCard {
                     SettingRow(
@@ -604,9 +596,21 @@ fun SettingsScreen(
                         subtitle = stringResource(R.string.settings_app_icon_summary),
                         onClick = { showIconDialog = true },
                     )
+                    Text(
+                        stringResource(R.string.settings_app_icon_widget_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 72.dp, end = 16.dp, bottom = 12.dp),
+                    )
                 }
             }
-            item { SectionLabel(stringResource(R.string.settings_section_export)) }
+            item {
+                SectionLabel(
+                    stringResource(R.string.settings_section_export),
+                    R.string.help_settings_export_title,
+                    R.array.help_settings_export,
+                )
+            }
             item {
                 SettingsCard {
                     SettingRow(
@@ -617,7 +621,13 @@ fun SettingsScreen(
                     )
                 }
             }
-            item { SectionLabel(stringResource(R.string.settings_section_about)) }
+            item {
+                SectionLabel(
+                    stringResource(R.string.settings_section_about),
+                    R.string.help_settings_about_title,
+                    R.array.help_settings_about,
+                )
+            }
             item {
                 SettingsCard {
                     SettingRow(
@@ -645,138 +655,6 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
                 )
-            }
-            item { SectionLabel(stringResource(R.string.dev_section)) }
-            item {
-                SettingsCard {
-                    // Master switch — when off every tunable falls back to its default.
-                    var devEnabled by remember(devEnabledCollect) { mutableStateOf(devEnabledCollect) }
-                    // Refresh wave speed (1×–10×) and duration in frames (2–12).
-                    var devSpeed by remember(devSpeedCollect) { mutableStateOf(devSpeedCollect) }
-                    var devFrames by remember(devFramesCollect) { mutableStateOf(devFramesCollect) }
-                    Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                stringResource(R.string.dev_master_switch),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Switch(checked = devEnabled, onCheckedChange = {
-                                devEnabled = it
-                                scope.launch { app.developerPrefs.setEnabled(it) }
-                            })
-                        }
-                    }
-                    if (devEnabled) {
-                        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-                            Text(
-                                stringResource(R.string.dev_refresh_speed, devSpeed),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                            )
-                            Spacer(Modifier.size(8.dp))
-                            Slider(
-                                value = devSpeed,
-                                onValueChange = {
-                                    devSpeed = it
-                                    scope.launch { app.developerPrefs.setRefreshAnimSpeed(it) }
-                                },
-                                valueRange = DeveloperPreferences.MIN_SPEED..DeveloperPreferences.MAX_SPEED,
-                            )
-                            Spacer(Modifier.size(12.dp))
-                            Text(
-                                stringResource(R.string.dev_refresh_frames, devFrames),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                            )
-                            Spacer(Modifier.size(8.dp))
-                            Slider(
-                                value = devFrames.toFloat(),
-                                onValueChange = {
-                                    devFrames = it.roundToInt()
-                                    scope.launch { app.developerPrefs.setRefreshAnimFrames(it.roundToInt()) }
-                                },
-                                valueRange = DeveloperPreferences.MIN_FRAMES.toFloat()..DeveloperPreferences.MAX_FRAMES.toFloat(),
-                                steps = DeveloperPreferences.MAX_FRAMES - DeveloperPreferences.MIN_FRAMES - 1,
-                            )
-                            Text(
-                                stringResource(R.string.dev_refresh_speed_hint),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-            }
-            item {
-                SettingsCard {
-                    // Source badge placement on Overview metric cards (title row placement etc.).
-                    Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-                        Text(
-                            stringResource(R.string.dev_source_layout),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium,
-                        )
-                        Spacer(Modifier.size(8.dp))
-                        SourceBadgeLayout.entries.forEach { option ->
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clip(MaterialTheme.shapes.medium)
-                                    .selectable(
-                                        selected = option == devLayoutCollect,
-                                        role = Role.RadioButton,
-                                        onClick = {
-                                            scope.launch { app.developerPrefs.setSourceBadgeLayout(option) }
-                                        },
-                                    )
-                                    .padding(vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                RadioButton(selected = option == devLayoutCollect, onClick = null)
-                                Spacer(Modifier.size(12.dp))
-                                Text(stringResource(option.labelRes), style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-                        Spacer(Modifier.size(8.dp))
-                        Text(
-                            stringResource(R.string.dev_source_style),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium,
-                        )
-                        Spacer(Modifier.size(4.dp))
-                        Text(
-                            stringResource(R.string.dev_source_style_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.size(8.dp))
-                        SourceBadgeStyle.entries.forEach { option ->
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clip(MaterialTheme.shapes.medium)
-                                    .selectable(
-                                        selected = option == devStyleCollect,
-                                        role = Role.RadioButton,
-                                        onClick = {
-                                            scope.launch { app.developerPrefs.setSourceBadgeStyle(option) }
-                                        },
-                                    )
-                                    .padding(vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                RadioButton(selected = option == devStyleCollect, onClick = null)
-                                Spacer(Modifier.size(12.dp))
-                                Text(stringResource(option.labelRes), style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-                    }
-                }
             }
         }
     }
@@ -819,7 +697,7 @@ fun SettingsScreen(
             onDismissRequest = { showIconDialog = false },
             title = { Text(stringResource(R.string.settings_app_icon)) },
             text = {
-                Column(Modifier.selectableGroup()) {
+                Column(Modifier.selectableGroup().verticalScroll(rememberScrollState())) {
                     LauncherIcon.entries.forEach { option ->
                         Row(
                             Modifier
@@ -832,6 +710,7 @@ fun SettingsScreen(
                                         showIconDialog = false
                                         if (option != currentIcon) {
                                             applyLauncherIcon(context, option)
+                                            currentIcon = option
                                             scope.launch {
                                                 snackbar.showSnackbar(
                                                     resources.getString(R.string.settings_app_icon_applied),
@@ -844,38 +723,23 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             RadioButton(selected = option == currentIcon, onClick = null)
-                            Spacer(Modifier.size(12.dp))
+                            Spacer(Modifier.size(8.dp))
+                            Box(
+                                Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(colorResource(option.backgroundRes)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Image(
+                                    painter = painterResource(option.foregroundRes),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            Spacer(Modifier.size(8.dp))
                             Text(stringResource(option.labelRes), style = MaterialTheme.typography.bodyLarge)
-                        }
-                    }
-
-                    SettingsDivider()
-                    // Custom image: pins a home-screen shortcut with the picked picture as icon.
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(MaterialTheme.shapes.medium)
-                            .selectable(selected = false, role = Role.Button, onClick = {
-                                showIconDialog = false
-                                customIconLauncher.launch("image/*")
-                            })
-                            .padding(vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Rounded.Image,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(22.dp),
-                        )
-                        Spacer(Modifier.size(12.dp))
-                        Column {
-                            Text(stringResource(R.string.icon_custom), style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                stringResource(R.string.icon_custom_hint),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
                         }
                     }
                 }
@@ -1034,14 +898,26 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(start = 24.dp, top = 8.dp),
-    )
+private fun SectionLabel(
+    text: String,
+    @StringRes helpTitleRes: Int? = null,
+    @ArrayRes helpLinesRes: Int? = null,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(start = 20.dp, top = 4.dp),
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 4.dp),
+        )
+        if (helpTitleRes != null && helpLinesRes != null) {
+            HelpButton(helpTitleRes, helpLinesRes, modifier = Modifier.size(36.dp))
+        }
+    }
 }
 
 /** Colour token shared by the settings badge and the dashboard source labels. */

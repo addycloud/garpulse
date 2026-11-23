@@ -26,8 +26,8 @@ android {
         applicationId = "dev.easonhuang.garpulse"
         minSdk = 28
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 4
+        versionName = "1.2.1"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -55,6 +55,20 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            // Debug builds are what gets sideloaded, and an unminified dex is ~75 MB on its own
+            // (material-icons-extended is most of it). Minify here too so the installed APK stays
+            // in the low single digits of MB. Pass -PfullDebug when you need an unobfuscated,
+            // non-optimized build for debugging.
+            val fullDebug = providers.gradleProperty("fullDebug").isPresent
+            isMinifyEnabled = !fullDebug
+            isShrinkResources = !fullDebug
+            if (!fullDebug) {
+                proguardFiles(
+                    getDefaultProguardFile("proguard-android-optimize.txt"),
+                    "proguard-rules.pro",
+                    "proguard-debug.pro",
+                )
+            }
         }
     }
 
@@ -107,6 +121,9 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // Debugger probes and version stamps never ship in a release-shaped build.
+            excludes += "/DebugProbesKt.bin"
+            excludes += "/META-INF/*.version"
         }
     }
 }

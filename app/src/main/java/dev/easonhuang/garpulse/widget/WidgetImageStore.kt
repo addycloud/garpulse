@@ -3,6 +3,8 @@ package dev.easonhuang.garpulse.widget
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.net.Uri
 import java.io.File
 import java.io.FileOutputStream
@@ -51,5 +53,21 @@ object WidgetImageStore {
     fun delete(path: String?) {
         if (path.isNullOrBlank()) return
         runCatching { File(path).takeIf { it.exists() }?.delete() }
+    }
+
+    /**
+     * Returns a copy of [bitmap] painted at [alpha] (0 = invisible, 1 = untouched). RemoteViews
+     * cannot set a view-level alpha, so the widget's "picture transparency" is baked into the
+     * bitmap instead — one mechanism, identical on the home screen and in the in-app preview.
+     */
+    fun withAlpha(bitmap: Bitmap, alpha: Float): Bitmap {
+        val a = alpha.coerceIn(0f, 1f)
+        if (a >= 1f) return bitmap
+        if (a <= 0f) return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        val out = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        Canvas(out).drawBitmap(bitmap, 0f, 0f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.alpha = (a * 255f).toInt().coerceIn(0, 255)
+        })
+        return out
     }
 }

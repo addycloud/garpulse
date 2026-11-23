@@ -16,9 +16,12 @@ import dev.easonhuang.garpulse.R
  * the RemoteViews at render time. Storing an explicit component (not just a package) also works
  * for apps whose launch intent cannot be reconstructed from a package name alone.
  *
- * Tap resolution order: deep-link URI → explicit component → package launch intent → GarPulse.
+ * Tap resolution order: deep-link URI → explicit component → package launch intent → the metric's
+ * own detail page in GarPulse (metric cells only) → nothing. A tap that carries no metric — the
+ * widget background or a picture tile — opens nothing when no destination is configured, so
+ * "don't open any app" stays configurable.
  * A component that is not exported (most in-app pages, e.g. Mi Home's device screens) throws a
- * SecurityException; we then fall back to the app's main screen instead of silently failing.
+ * SecurityException; we surface a toast instead of opening an app the user never picked.
  */
 object WidgetTapAction : ActionCallback {
 
@@ -32,6 +35,7 @@ object WidgetTapAction : ActionCallback {
             ?.let(ComponentName::unflattenFromString)
         val pkg = parameters[KEY_PACKAGE]?.takeIf { it.isNotBlank() }
         val uri = parameters[KEY_URI]?.takeIf { it.isNotBlank() }
+        // Carried by metric cells only: the fallback destination when no app is configured.
         val metric = parameters[KEY_METRIC]?.takeIf { it.isNotBlank() }
 
         // Built-in targets (@refresh/@overview/…) never open another app.
@@ -40,21 +44,30 @@ object WidgetTapAction : ActionCallback {
             return
         }
 
-        val fallback = Intent(context, MainActivity::class.java).apply {
-            putExtra(MainActivity.EXTRA_METRIC, metric)
-        }
         val intent = when {
             uri != null -> Intent(Intent.ACTION_VIEW, Uri.parse(uri))
             component != null -> Intent().setComponent(component)
             pkg != null -> launchIntent(context, pkg)
             else -> null
-        } ?: fallback
+        }
+        if (intent == null) {
+            // No destination configured. A metric cell still knows which metric it belongs to, so
+            // it opens that metric's detail page inside GarPulse — the historical default. A tap
+            // on the widget's background / picture carries no metric, and that really does
+            // nothing (so "don't open any app" stays configurable).
+            if (metric.isNullOrBlank()) return
+            val detail = Intent(context, MainActivity::class.java).apply {
+                putExtra(MainActivity.EXTRA_METRIC, metric)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            runCatching { context.startActivity(detail) }
+            return
+        }
 
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        val opened = runCatching { context.startActivity(intent); true }.getOrDefault(false)
-        if (!opened && intent != fallback) {
-            // Deep links can be unresolvable and components unexported — degrade gracefully.
-            runCatching { context.startActivity(fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        if (!runCatching { context.startActivity(intent); true }.getOrDefault(false)) {
+            // Deep links can be unresolvable and components unexported — say so instead of
+            // silently swapping in an app the user never chose.
             Toast.makeText(context, R.string.widget_tap_open_failed, Toast.LENGTH_SHORT).show()
         }
     }
