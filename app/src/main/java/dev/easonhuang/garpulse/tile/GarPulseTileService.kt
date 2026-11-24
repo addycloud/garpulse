@@ -38,8 +38,7 @@ class GarPulseTileService : TileService() {
             val value = if (granted) {
                 runCatching {
                     val system = app.units.system.first()
-                    app.healthConnect.readDashboard(system)
-                        .firstOrNull { it.metric == Metric.STEPS }
+                    app.healthConnect.readSingleMetric(Metric.STEPS, system)
                         ?.value?.takeIf { it != "-" }
                 }.getOrNull()
             } else null

@@ -547,4 +547,22 @@
         <item>Shows the app version and the open-source repository.</item>
         <item>The privacy note at the bottom of this page explains how data is handled.</item>
     </string-array>
+
+    <!-- Multi-column density switcher -->
+    <string name="density_switch">Grid density</string>
+    <string name="density_banner">Banner (1 col)</string>
+    <string name="density_standard">Standard (2 cols)</string>
+    <string name="density_compact">Compact (3 cols)</string>
+    <string name="density_dense">Dense (4 cols)</string>
+
+    <!-- Widget editor style presets -->
+    <string name="widget_preset_title">Style presets</string>
+    <string name="widget_preset_dark">Default Dark</string>
+    <string name="widget_preset_sport">Garmin Sport</string>
+    <string name="widget_preset_light">Clean Light</string>
+    <string name="widget_preset_glass">Minimal Glass</string>
+    <string name="widget_preset_amoled">AMOLED Black</string>
+
+    <!-- Update permission prompt -->
+    <string name="update_permission_needed">Please allow installing unknown apps in system settings</string>
 </resources>

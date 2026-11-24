@@ -2,6 +2,8 @@ package dev.easonhuang.garpulse.data
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.IOException
@@ -40,28 +42,36 @@ internal fun jwtExpirySeconds(jwt: String): Long {
  */
 class GarminPersonalApi(private val prefs: MetricSourcePreferences) {
 
+    private val tokenMutex = Mutex()
+
     /** Returns a cached token while it has over an hour left, otherwise requests a new one. */
     suspend fun token(region: GarminRegion, force: Boolean = false): String = withContext(Dispatchers.IO) {
-        val state = prefs.state.first()
-        if (!force && state.tokenUsable(region)) return@withContext state.token(region)
-        val key = state.apiKey(region).trim()
-        if (key.isEmpty()) throw GarminApiException("No Garmin Personal API key configured for $region")
+        if (!force) {
+            val state = prefs.state.first()
+            if (state.tokenUsable(region)) return@withContext state.token(region)
+        }
+        tokenMutex.withLock {
+            val state = prefs.state.first()
+            if (!force && state.tokenUsable(region)) return@withLock state.token(region)
+            val key = state.apiKey(region).trim()
+            if (key.isEmpty()) throw GarminApiException("No Garmin Personal API key configured for $region")
 
-        val connection = open(region.baseUrl + GARMIN_TOKEN_PATH, "POST")
-        try {
-            connection.setRequestProperty("Authorization", "ApiKey $key")
-            connection.setRequestProperty("Accept", "*/*")
-            val body = connection.readBody()
-            if (connection.responseCode !in 200..299) {
-                throw GarminApiException("Token request failed (${connection.responseCode}): ${brief(body)}", connection.responseCode)
+            val connection = open(region.baseUrl + GARMIN_TOKEN_PATH, "POST")
+            try {
+                connection.setRequestProperty("Authorization", "ApiKey $key")
+                connection.setRequestProperty("Accept", "*/*")
+                val body = connection.readBody()
+                if (connection.responseCode !in 200..299) {
+                    throw GarminApiException("Token request failed (${connection.responseCode}): ${brief(body)}", connection.responseCode)
+                }
+                val jwt = body.trim()
+                val expiresAt = jwtExpirySeconds(jwt)
+                if (expiresAt <= 0L) throw GarminApiException("Garmin returned an unreadable access token")
+                prefs.saveToken(region, jwt, expiresAt * 1000L)
+                jwt
+            } finally {
+                connection.disconnect()
             }
-            val jwt = body.trim()
-            val expiresAt = jwtExpirySeconds(jwt)
-            if (expiresAt <= 0L) throw GarminApiException("Garmin returned an unreadable access token")
-            prefs.saveToken(region, jwt, expiresAt * 1000L)
-            jwt
-        } finally {
-            connection.disconnect()
         }
     }
 

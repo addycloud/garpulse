@@ -40,6 +40,9 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 
 /**
@@ -205,25 +208,52 @@ class HealthConnectManager(
         }
     }
 
-    private suspend fun readLocalDashboard(system: UnitSystem): List<MetricSummary> {
-        val granted = runCatching { grantedPermissions() }.getOrDefault(emptySet())
-        return Metric.entries.map { metric ->
-            // Garmin-only metrics have no local record type; they stay empty on the local source
-            // and are filled from Garmin when mirrored mode is active.
-            if (metric.garminOnly) {
-                return@map MetricSummary(
-                    metric, "-", null, hasData = false, granted = true, system = system,
-                    source = ValueSource.GARMIN_API,
-                )
-            }
-            val has = granted.contains(permissionFor(metric))
-            if (!has) {
-                MetricSummary(metric, "-", null, hasData = false, granted = false, system = system)
-            } else {
-                runCatching { summarize(metric, system) }
-                    .getOrElse { MetricSummary(metric, "-", str(R.string.no_data), hasData = false, granted = true, system = system) }
-            }
+    /** Reads summary for a single metric without reading the full dashboard (used e.g. by QS tiles). */
+    suspend fun readSingleMetric(metric: Metric, system: UnitSystem = UnitSystem.METRIC): MetricSummary? {
+        if (garminOnlyMode()) {
+            return garminMergedDashboard(system).firstOrNull { it.metric == metric }
         }
+        val granted = runCatching { grantedPermissions() }.getOrDefault(emptySet())
+        val hasLocal = granted.contains(permissionFor(metric))
+        val local = if (hasLocal && !metric.garminOnly) {
+            runCatching { summarize(metric, system) }.getOrNull()
+        } else null
+
+        if (!mirrored()) return local
+        val preferGarmin = sourcePrefs?.state?.first()?.garminBeforeHc == true
+        val remote = if (metric.garminOnly || local == null || !local.hasData || preferGarmin) {
+            garminMergedDashboard(system).firstOrNull { it.metric == metric }
+        } else null
+
+        return when {
+            remote != null && remote.hasData && local?.hasData == true -> if (preferGarmin) remote else local
+            remote != null && remote.hasData -> remote
+            else -> local
+        }
+    }
+
+    private suspend fun readLocalDashboard(system: UnitSystem): List<MetricSummary> = coroutineScope {
+        val granted = runCatching { grantedPermissions() }.getOrDefault(emptySet())
+        Metric.entries.map { metric ->
+            async {
+                // Garmin-only metrics have no local record type; they stay empty on the local source
+                // and are filled from Garmin when mirrored mode is active.
+                if (metric.garminOnly) {
+                    MetricSummary(
+                        metric, "-", null, hasData = false, granted = true, system = system,
+                        source = ValueSource.GARMIN_API,
+                    )
+                } else {
+                    val has = granted.contains(permissionFor(metric))
+                    if (!has) {
+                        MetricSummary(metric, "-", null, hasData = false, granted = false, system = system)
+                    } else {
+                        runCatching { summarize(metric, system) }
+                            .getOrElse { MetricSummary(metric, "-", str(R.string.no_data), hasData = false, granted = true, system = system) }
+                    }
+                }
+            }
+        }.awaitAll()
     }
 
     private suspend fun summarize(metric: Metric, system: UnitSystem): MetricSummary {

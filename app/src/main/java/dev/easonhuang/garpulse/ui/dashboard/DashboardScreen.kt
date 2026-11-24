@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -23,7 +24,12 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.ViewWeek
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -33,6 +39,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -51,6 +58,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -106,6 +114,7 @@ fun DashboardScreen(
     val haptics = LocalHapticFeedback.current
 
     var editing by rememberSaveable { mutableStateOf(false) }
+    var showDensityMenu by remember { mutableStateOf(false) }
     BackHandler(enabled = editing) { editing = false }
     val startEditing = {
         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -126,6 +135,39 @@ fun DashboardScreen(
                             Icon(Icons.Rounded.Check, contentDescription = stringResource(R.string.action_done))
                         }
                     } else {
+                        Box {
+                            IconButton(onClick = { showDensityMenu = true }) {
+                                Icon(Icons.Rounded.ViewWeek, contentDescription = stringResource(R.string.density_switch))
+                            }
+                            DropdownMenu(
+                                expanded = showDensityMenu,
+                                onDismissRequest = { showDensityMenu = false },
+                            ) {
+                                val densityOptions = listOf(
+                                    1 to R.string.density_banner,
+                                    2 to R.string.density_standard,
+                                    3 to R.string.density_compact,
+                                    4 to R.string.density_dense,
+                                )
+                                densityOptions.forEach { (cols, res) ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                stringResource(res),
+                                                fontWeight = if (gridColumns == cols) FontWeight.Bold else FontWeight.Normal,
+                                            )
+                                        },
+                                        trailingIcon = if (gridColumns == cols) {
+                                            { Icon(Icons.Rounded.Check, null) }
+                                        } else null,
+                                        onClick = {
+                                            vm.saveColumns(cols)
+                                            showDensityMenu = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
                         IconButton(onClick = startEditing) {
                             Icon(Icons.Rounded.Tune, contentDescription = stringResource(R.string.dashboard_customize))
                         }
@@ -144,38 +186,60 @@ fun DashboardScreen(
     ) { inner ->
         val contentPadding = PaddingValues(
             start = 16.dp, end = 16.dp,
-            top = inner.calculateTopPadding(),
+            top = 16.dp,
             bottom = bottomInset + 24.dp,
         )
-        if (editing) {
-            val all = allSummaries
-            val stored = layout
-            if (all != null && stored != null) {
-                EditGrid(all, stored, contentPadding, gridColumns, showSource = effectiveShowSource, sparkBehind = sparkBehind, onSave = vm::saveLayout)
-            }
-            return@Scaffold
-        }
-        val data = summaries
-        if (data == null) {
-            // initial load handled by spinner in app bar; keep grid space empty
-            return@Scaffold
-        }
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(gridColumns.coerceIn(1, 10)),
-            contentPadding = contentPadding,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = vm::refresh,
+            modifier = Modifier.fillMaxSize().padding(top = inner.calculateTopPadding()),
         ) {
-            items(data, key = { it.metric.key }) { summary ->
-                MetricCard(
-                    summary = summary,
-                    onClick = {
-                        if (summary.granted) onOpenMetric(summary.metric) else onManagePermissions()
-                    },
-                    onLongClick = startEditing,
-                    showSource = effectiveShowSource,
-                    sparkBehind = sparkBehind,
-                )
+            if (editing) {
+                val all = allSummaries
+                val stored = layout
+                if (all != null && stored != null) {
+                    EditGrid(all, stored, contentPadding, gridColumns, showSource = effectiveShowSource, sparkBehind = sparkBehind, onSave = vm::saveLayout)
+                }
+            } else {
+                val data = summaries
+                if (data == null) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(gridColumns.coerceIn(1, 10)),
+                        contentPadding = contentPadding,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        userScrollEnabled = false,
+                    ) {
+                        items(6) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(if (gridColumns == 1) 94.dp else if (gridColumns >= 3) 120.dp else 148.dp),
+                                shape = MaterialTheme.shapes.extraLarge,
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f)),
+                            ) {}
+                        }
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(gridColumns.coerceIn(1, 10)),
+                        contentPadding = contentPadding,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(data, key = { it.metric.key }) { summary ->
+                            MetricCard(
+                                summary = summary,
+                                onClick = {
+                                    if (summary.granted) onOpenMetric(summary.metric) else onManagePermissions()
+                                },
+                                onLongClick = startEditing,
+                                showSource = effectiveShowSource,
+                                sparkBehind = sparkBehind,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

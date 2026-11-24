@@ -3,15 +3,19 @@ package dev.easonhuang.garpulse.ui.components
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -34,12 +38,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.easonhuang.garpulse.R
-import dev.easonhuang.garpulse.data.ValueSource
 import dev.easonhuang.garpulse.data.MetricSummary
+import dev.easonhuang.garpulse.data.ValueSource
 import dev.easonhuang.garpulse.data.title
 import dev.easonhuang.garpulse.data.unit
 
@@ -58,123 +63,249 @@ fun MetricCard(
     val shape = MaterialTheme.shapes.extraLarge
     val hasSpark = !locked && summary.spark.size > 1
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        // Only extremely narrow columns (< ~3.5 per row on a phone) still clip the badge text;
-        // there the colour-dot-only form keeps the meaning while never clipping.
-        val compact = maxWidth < 110.dp
-        // Adaptive display tiers by card width:
-        //  - wide (≥150dp, ~1-2 cols): 36dp icon, 14sp title, one line;
-        //  - medium (~110-150dp, ~3 cols): 30dp icon, title shrinks font but stays complete;
-        //  - narrow (<110dp, 4+ cols): 24dp icon, title may wrap to 2 lines, shrink font,
-        //    and only ellipsize when even that cannot fit.
-        val iconSize = when {
-            maxWidth >= 150.dp -> 36.dp
-            maxWidth >= 110.dp -> 30.dp
-            else -> 24.dp
-        }
-        val titleLines = if (maxWidth < 110.dp) 2 else 1
-        Card(
-            modifier = modifier
-                .height(168.dp)
-                .clip(shape)
-                .combinedClickable(onClick = onClick, onLongClick = onLongClick),
-            shape = shape,
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ),
-        ) {
-            Box(Modifier.fillMaxWidth()) {
-                if (sparkBehind && hasSpark) {
-                    // Backdrop mode: the trend fills the whole card behind the text, softened
-                    // so headline values keep their contrast (WCAG AA needs 4.5:1).
-                    Sparkline(
-                        summary.spark,
-                        accent,
-                        Modifier
-                            .matchParentSize()
-                            .alpha(0.35f),
-                    )
-                }
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier
-                            .size(iconSize)
-                            .clip(CircleShape)
-                            .background(Brush.linearGradient(listOf(accent.copy(alpha = 0.30f), accent.copy(alpha = 0.16f)))),
-                        contentAlignment = Alignment.Center,
+        val cardWidth = maxWidth
+        if (cardWidth >= 230.dp) {
+            // Tier 1: Wide Banner (1-column mode or tablet split)
+            Card(
+                modifier = modifier
+                    .height(94.dp)
+                    .clip(shape)
+                    .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+                shape = shape,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+            ) {
+                Box(Modifier.fillMaxSize()) {
+                    if (sparkBehind && hasSpark) {
+                        Sparkline(summary.spark, accent, Modifier.matchParentSize().alpha(0.25f))
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(
-                            imageVector = if (locked) Icons.Rounded.Lock else summary.metric.icon,
-                            contentDescription = null,
-                            tint = accent,
-                            modifier = Modifier.size(iconSize * 0.55f),
+                        Box(
+                            Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Brush.linearGradient(listOf(accent.copy(alpha = 0.30f), accent.copy(alpha = 0.16f)))),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = if (locked) Icons.Rounded.Lock else summary.metric.icon,
+                                contentDescription = null,
+                                tint = accent,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = summary.metric.title,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (showSource) {
+                                    Spacer(Modifier.width(6.dp))
+                                    SourceBadge(summary.source, compact = false)
+                                }
+                            }
+                            Spacer(Modifier.height(2.dp))
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                BasicText(
+                                    text = if (locked) stringResource(R.string.card_locked) else summary.value,
+                                    style = MaterialTheme.typography.headlineMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    ),
+                                    maxLines = 1,
+                                    autoSize = TextAutoSize.StepBased(minFontSize = 14.sp, maxFontSize = 26.sp, stepSize = 1.sp),
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                if (!locked && summary.hasData) {
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = summary.metric.unit(summary.system),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        modifier = Modifier.padding(bottom = 3.dp),
+                                    )
+                                }
+                            }
+                        }
+                        if (hasSpark && !sparkBehind) {
+                            Spacer(Modifier.width(12.dp))
+                            Column(
+                                horizontalAlignment = Alignment.End,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier.width(96.dp),
+                            ) {
+                                Sparkline(summary.spark, accent, Modifier.fillMaxWidth().height(32.dp))
+                                if (!summary.caption.isNullOrBlank()) {
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        text = summary.caption,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        } else if (!summary.caption.isNullOrBlank()) {
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                text = if (locked) stringResource(R.string.card_tap_to_grant) else summary.caption,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                textAlign = TextAlign.End,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.widthIn(max = 110.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            // Tier 2-4: Multi-Column Grids (2, 3, 4+ columns)
+            val compact = cardWidth < 110.dp
+            val cardHeight = when {
+                cardWidth >= 135.dp -> 148.dp  // Standard 2-col
+                cardWidth >= 95.dp -> 120.dp   // Compact 3-col
+                else -> 92.dp                 // Dense 4+ col
+            }
+            val cardPadding = when {
+                cardWidth >= 135.dp -> 14.dp
+                cardWidth >= 95.dp -> 10.dp
+                else -> 8.dp
+            }
+            val iconSize = when {
+                cardWidth >= 135.dp -> 32.dp
+                cardWidth >= 95.dp -> 26.dp
+                else -> 22.dp
+            }
+            val titleLines = if (cardWidth < 95.dp) 1 else if (cardWidth < 120.dp) 2 else 1
+
+            Card(
+                modifier = modifier
+                    .height(cardHeight)
+                    .clip(shape)
+                    .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+                shape = shape,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+            ) {
+                Box(Modifier.fillMaxSize()) {
+                    if (sparkBehind && hasSpark) {
+                        Sparkline(
+                            summary.spark,
+                            accent,
+                            Modifier.matchParentSize().alpha(0.32f),
                         )
                     }
-                    // The source badge sits directly after the icon, before the title.
-                    if (showSource) {
-                        Spacer(Modifier.size(6.dp))
-                        SourceBadge(summary.source, compact)
+                    Column(Modifier.fillMaxSize().padding(cardPadding)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                Modifier
+                                    .size(iconSize)
+                                    .clip(CircleShape)
+                                    .background(Brush.linearGradient(listOf(accent.copy(alpha = 0.30f), accent.copy(alpha = 0.16f)))),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = if (locked) Icons.Rounded.Lock else summary.metric.icon,
+                                    contentDescription = null,
+                                    tint = accent,
+                                    modifier = Modifier.size(iconSize * 0.58f),
+                                )
+                            }
+                            if (showSource) {
+                                Spacer(Modifier.width(4.dp))
+                                SourceBadge(summary.source, compact = compact)
+                            }
+                            Spacer(Modifier.width(6.dp))
+                            BasicText(
+                                text = summary.metric.title,
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                ),
+                                maxLines = titleLines,
+                                autoSize = TextAutoSize.StepBased(
+                                    minFontSize = 8.sp,
+                                    maxFontSize = if (cardWidth >= 135.dp) 14.sp else 12.sp,
+                                    stepSize = 1.sp,
+                                ),
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+
+                        Spacer(Modifier.height(2.dp))
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            BasicText(
+                                text = if (locked) stringResource(R.string.card_locked) else summary.value,
+                                style = MaterialTheme.typography.headlineMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                ),
+                                maxLines = 1,
+                                autoSize = TextAutoSize.StepBased(
+                                    minFontSize = 10.sp,
+                                    maxFontSize = if (cardWidth >= 135.dp) 26.sp else if (cardWidth >= 95.dp) 22.sp else 16.sp,
+                                    stepSize = 1.sp,
+                                ),
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            if (!locked && summary.hasData) {
+                                Spacer(Modifier.width(3.dp))
+                                Text(
+                                    text = summary.metric.unit(summary.system),
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = if (cardWidth < 95.dp) 9.sp else 11.sp,
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(bottom = 3.dp),
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.weight(1f))
+                        if (cardWidth >= 95.dp) {
+                            if (hasSpark && !sparkBehind) {
+                                if (cardWidth >= 135.dp) {
+                                    // 2-col mode: both trend and caption text are visible!
+                                    Sparkline(summary.spark, accent, Modifier.fillMaxWidth().height(22.dp))
+                                    if (!summary.caption.isNullOrBlank()) {
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(
+                                            text = summary.caption,
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                } else {
+                                    // 3-col mode: compact sparkline
+                                    Sparkline(summary.spark, accent, Modifier.fillMaxWidth().height(18.dp))
+                                }
+                            } else {
+                                Text(
+                                    text = if (locked) stringResource(R.string.card_tap_to_grant) else (summary.caption ?: ""),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
                     }
-                    Spacer(Modifier.size(8.dp))
-                    // Prefer shrinking the font (then wrapping on 4+ narrow columns) over
-                    // clipping, so "步数" stays complete at any column count.
-                    BasicText(
-                        text = summary.metric.title,
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                        maxLines = titleLines,
-                        autoSize = TextAutoSize.StepBased(
-                            minFontSize = 8.sp,
-                            maxFontSize = 14.sp,
-                            stepSize = 1.sp,
-                        ),
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                Spacer(Modifier.height(2.dp))
-                Row(verticalAlignment = Alignment.Bottom) {
-                    // Auto-shrinks to fit narrow cards / large system fonts instead of clipping
-                    // digits (e.g. "1,053" → "1,05" on a 3-column phone layout).
-                    BasicText(
-                        text = if (locked) stringResource(R.string.card_locked) else summary.value,
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        ),
-                        maxLines = 1,
-                        autoSize = TextAutoSize.StepBased(
-                            minFontSize = 10.sp,
-                            maxFontSize = 28.sp,
-                            stepSize = 1.sp,
-                        ),
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    if (!locked && summary.hasData) {
-                        Spacer(Modifier.size(4.dp))
-                        Text(
-                            text = summary.metric.unit(summary.system),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            softWrap = false,
-                            modifier = Modifier.padding(bottom = 4.dp),
-                        )
-                    }
-                }
-                Spacer(Modifier.weight(1f))
-                if (hasSpark && !sparkBehind) {
-                    Sparkline(summary.spark, accent, Modifier.fillMaxWidth().height(28.dp))
-                } else {
-                    Text(
-                        text = if (locked) stringResource(R.string.card_tap_to_grant) else (summary.caption ?: ""),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
                 }
             }
         }

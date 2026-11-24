@@ -1,6 +1,9 @@
 package dev.easonhuang.garpulse.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +18,10 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -25,6 +32,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -34,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.easonhuang.garpulse.R
 import dev.easonhuang.garpulse.data.SeriesPoint
+import kotlin.math.roundToInt
 
 /** Tiny inline trend line for dashboard cards. */
 @Composable
@@ -164,7 +173,7 @@ fun BarChart(
     }
 }
 
-/** Smooth-ish line chart with min/max guide labels for sampled metrics. */
+/** Smooth-ish line chart with min/max guide labels for sampled metrics. Supports interactive touch scrubbing. */
 @Composable
 fun LineChart(
     points: List<SeriesPoint>,
@@ -175,23 +184,78 @@ fun LineChart(
 ) {
     if (points.size < 2) {
         Box(modifier, contentAlignment = Alignment.Center) {
-            Text(stringResource(R.string.chart_not_enough_data), style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                stringResource(R.string.chart_not_enough_data),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         return
     }
     val values = points.map { it.value }
     val min = values.min()
     val max = values.max()
+    var selectedIndex by remember(points) { mutableStateOf<Int?>(null) }
+
     Column(modifier) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(stringResource(R.string.chart_max, format(max)), style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(stringResource(R.string.chart_min, format(min)), style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (selectedIndex != null && selectedIndex in points.indices) {
+            val sel = points[selectedIndex!!]
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "${sel.label} · ${format(sel.value)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = color,
+                )
+                Text(
+                    text = "✕",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .clickable { selectedIndex = null }
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                )
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    stringResource(R.string.chart_max, format(max)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    stringResource(R.string.chart_min, format(min)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         Spacer(Modifier.height(8.dp))
-        Canvas(Modifier.fillMaxWidth().weight(1f)) {
+        Canvas(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .pointerInput(points) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val stepX = size.width / (points.size - 1).coerceAtLeast(1)
+                        selectedIndex = (down.position.x / stepX).roundToInt().coerceIn(0, points.lastIndex)
+                        do {
+                            val event = awaitPointerEvent()
+                            event.changes.firstOrNull()?.let { change ->
+                                if (change.pressed) {
+                                    selectedIndex = (change.position.x / stepX).roundToInt().coerceIn(0, points.lastIndex)
+                                    change.consume()
+                                }
+                            }
+                        } while (event.changes.any { it.pressed })
+                    }
+                }
+        ) {
             val range = (max - min).takeIf { it > 0f } ?: 1f
             val stepX = size.width / (points.size - 1)
             val line = Path()
@@ -216,6 +280,22 @@ fun LineChart(
                     drawCircle(color, radius = 5f.dp.toPx(), center = Offset(x, y))
                     drawCircle(Color.White, radius = 2.5f.dp.toPx(), center = Offset(x, y))
                 }
+            }
+            if (selectedIndex != null && selectedIndex in points.indices) {
+                val idx = selectedIndex!!
+                val selX = idx * stepX
+                val selVal = points[idx].value
+                val selY = size.height - ((selVal - min) / range) * size.height * 0.85f - size.height * 0.08f
+                drawLine(
+                    color = color.copy(alpha = 0.5f),
+                    start = Offset(selX, 0f),
+                    end = Offset(selX, size.height),
+                    strokeWidth = 1.5.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx())),
+                )
+                drawCircle(color.copy(alpha = 0.25f), radius = 10.dp.toPx(), center = Offset(selX, selY))
+                drawCircle(color, radius = 6.dp.toPx(), center = Offset(selX, selY))
+                drawCircle(Color.White, radius = 3.dp.toPx(), center = Offset(selX, selY))
             }
         }
         Spacer(Modifier.height(6.dp))

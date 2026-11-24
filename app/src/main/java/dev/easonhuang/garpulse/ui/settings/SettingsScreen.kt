@@ -1022,6 +1022,24 @@ fun SettingsScreen(
             text = { Text(stringResource(R.string.update_ready_body, mirror)) },
             confirmButton = {
                 TextButton(onClick = {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+                        !context.packageManager.canRequestPackageInstalls()
+                    ) {
+                        android.widget.Toast.makeText(
+                            context,
+                            context.getString(R.string.update_permission_needed),
+                            android.widget.Toast.LENGTH_LONG,
+                        ).show()
+                        runCatching {
+                            context.startActivity(
+                                Intent(
+                                    android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                    android.net.Uri.parse("package:${context.packageName}"),
+                                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        }
+                        return@TextButton
+                    }
                     updateReady = null
                     val uri = androidx.core.content.FileProvider.getUriForFile(
                         context, "${context.packageName}.fileprovider", apk,

@@ -19,6 +19,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -65,6 +67,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -525,7 +528,7 @@ private fun WidgetEditor(
                         HintText(stringResource(R.string.widget_editor_add_metric_hint))
                         Spacer(Modifier.size(8.dp))
                     }
-                    config.metrics.forEach { metric ->
+                    config.metrics.forEachIndexed { index, metric ->
                         val target = config.tapFor(metric.key)
                         val pkg = target.component?.let { ComponentName.unflattenFromString(it)?.packageName }
                             ?: target.packageName
@@ -546,6 +549,26 @@ private fun WidgetEditor(
                             accent = config.metricColors[metric.key]
                                 ?: Color(metric.accent.toArgb()),
                             tapLabel = tapLabel,
+                            canMoveUp = index > 0,
+                            canMoveDown = index < config.metrics.lastIndex,
+                            onMoveUp = {
+                                if (index > 0) {
+                                    val list = config.metrics.toMutableList()
+                                    val temp = list[index]
+                                    list[index] = list[index - 1]
+                                    list[index - 1] = temp
+                                    config = config.copy(metrics = list)
+                                }
+                            },
+                            onMoveDown = {
+                                if (index < config.metrics.lastIndex) {
+                                    val list = config.metrics.toMutableList()
+                                    val temp = list[index]
+                                    list[index] = list[index + 1]
+                                    list[index + 1] = temp
+                                    config = config.copy(metrics = list)
+                                }
+                            },
                             onSetApp = { appPickerMetric = metric.key },
                             onSetColor = { colorTarget = ColorTarget.METRIC(metric.key, metric) },
                             onRemove = {
@@ -577,6 +600,96 @@ private fun WidgetEditor(
                     helpTitleRes = R.string.help_widget_appearance_title,
                     helpLinesRes = R.array.help_widget_appearance,
                 ) {
+                    Text(
+                        stringResource(R.string.widget_preset_title),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        val presets = listOf(
+                            Triple(stringResource(R.string.widget_preset_dark), Color(0xFF1E2433)) {
+                                config = config.copy(
+                                    backgroundColor = Color(0xFF1E2433),
+                                    backgroundOpacity = 92,
+                                    cardColor = Color(0xFF2A2F3B),
+                                    cardOpacity = 78,
+                                    textColor = null,
+                                    accentColor = null,
+                                    stripColor = null,
+                                    stripOpacity = 30,
+                                )
+                            },
+                            Triple(stringResource(R.string.widget_preset_sport), Color(0xFF00C9FF)) {
+                                config = config.copy(
+                                    backgroundColor = Color(0xFF121820),
+                                    backgroundOpacity = 95,
+                                    cardColor = Color(0xFF1C2430),
+                                    cardOpacity = 90,
+                                    textColor = Color(0xFFE8EEF5),
+                                    accentColor = Color(0xFF00C9FF),
+                                    stripColor = Color(0xFF00C9FF),
+                                    stripOpacity = 40,
+                                )
+                            },
+                            Triple(stringResource(R.string.widget_preset_light), Color(0xFF2563EB)) {
+                                config = config.copy(
+                                    backgroundColor = Color(0xFFF3F4F6),
+                                    backgroundOpacity = 95,
+                                    cardColor = Color(0xFFFFFFFF),
+                                    cardOpacity = 90,
+                                    textColor = Color(0xFF1F2937),
+                                    accentColor = Color(0xFF2563EB),
+                                    stripColor = Color(0xFF3B82F6),
+                                    stripOpacity = 30,
+                                )
+                            },
+                            Triple(stringResource(R.string.widget_preset_glass), Color(0xFF90CAF9)) {
+                                config = config.copy(
+                                    backgroundColor = Color(0xFF10141E),
+                                    backgroundOpacity = 20,
+                                    cardColor = Color(0xFFFFFFFF),
+                                    cardOpacity = 15,
+                                    textColor = Color(0xFFFFFFFF),
+                                    accentColor = null,
+                                    stripColor = Color(0xFFFFFFFF),
+                                    stripOpacity = 25,
+                                )
+                            },
+                            Triple(stringResource(R.string.widget_preset_amoled), Color(0xFFFFFFFF)) {
+                                config = config.copy(
+                                    backgroundColor = Color(0xFF000000),
+                                    backgroundOpacity = 100,
+                                    cardColor = Color(0xFF121212),
+                                    cardOpacity = 100,
+                                    textColor = Color(0xFFF0F0F0),
+                                    accentColor = null,
+                                    stripColor = Color(0xFF333333),
+                                    stripOpacity = 40,
+                                )
+                            },
+                        )
+                        presets.forEach { (label, dotColor, applyPreset) ->
+                            SuggestionChip(
+                                onClick = applyPreset,
+                                label = { Text(label) },
+                                icon = {
+                                    Box(
+                                        Modifier
+                                            .size(10.dp)
+                                            .clip(CircleShape)
+                                            .background(dotColor),
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
                     // Switches come FIRST: they decide which elements exist, and every element
                     // specific setting below only shows while its element is actually present.
                     if (hasMetrics) {
@@ -1334,6 +1447,10 @@ private fun MetricRow(
     title: String,
     accent: Color,
     tapLabel: String,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
     onSetApp: () -> Unit,
     onSetColor: () -> Unit,
     onRemove: () -> Unit,
@@ -1343,9 +1460,35 @@ private fun MetricRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Column(verticalArrangement = Arrangement.Center) {
+            IconButton(
+                onClick = onMoveUp,
+                enabled = canMoveUp,
+                modifier = Modifier.size(24.dp),
+            ) {
+                Text(
+                    "↑",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (canMoveUp) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                )
+            }
+            Spacer(Modifier.height(2.dp))
+            IconButton(
+                onClick = onMoveDown,
+                enabled = canMoveDown,
+                modifier = Modifier.size(24.dp),
+            ) {
+                Text(
+                    "↓",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (canMoveDown) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                )
+            }
+        }
+        Spacer(Modifier.size(6.dp))
         // The swatch doubles as the colour-customisation button for this metric.
         Box(
             Modifier
@@ -1354,7 +1497,7 @@ private fun MetricRow(
                 .background(accent)
                 .clickable(onClick = onSetColor),
         )
-        Spacer(Modifier.size(12.dp))
+        Spacer(Modifier.size(10.dp))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             Text(tapLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

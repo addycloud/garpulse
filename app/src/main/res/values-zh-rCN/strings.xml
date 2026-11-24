@@ -535,4 +535,22 @@
         <item>显示应用版本与开源项目地址。</item>
         <item>本页底部的隐私说明介绍了数据处理方式。</item>
     </string-array>
+
+    <!-- 多列视图切换 -->
+    <string name="density_switch">网格密度</string>
+    <string name="density_banner">横幅视图（1 列）</string>
+    <string name="density_standard">标准视图（2 列）</string>
+    <string name="density_compact">紧凑视图（3 列）</string>
+    <string name="density_dense">密集视图（4 列）</string>
+
+    <!-- 小组件配置预设风格 -->
+    <string name="widget_preset_title">风格预设</string>
+    <string name="widget_preset_dark">经典深色</string>
+    <string name="widget_preset_sport">佳明运动</string>
+    <string name="widget_preset_light">明亮浅色</string>
+    <string name="widget_preset_glass">全透简约</string>
+    <string name="widget_preset_amoled">极夜黑曜</string>
+
+    <!-- 更新安装权限提示 -->
+    <string name="update_permission_needed">请在系统设置中允许安装未知应用</string>
 </resources>

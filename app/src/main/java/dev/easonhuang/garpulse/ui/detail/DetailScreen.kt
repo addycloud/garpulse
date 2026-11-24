@@ -29,6 +29,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -167,6 +168,7 @@ private fun ChartCard(d: MetricDetail) {
                 )
             }
             Spacer(Modifier.height(8.dp))
+            var selectedBar by remember(d.points) { mutableStateOf<Int?>(null) }
             Box(Modifier.fillMaxWidth().height(220.dp)) {
                 if (useLine) {
                     LineChart(
@@ -175,7 +177,13 @@ private fun ChartCard(d: MetricDetail) {
                         showDots = true,
                     )
                 } else {
-                    BarChart(d.points, d.metric.accent, Modifier.fillMaxSize())
+                    BarChart(
+                        points = d.points,
+                        color = d.metric.accent,
+                        modifier = Modifier.fillMaxSize(),
+                        selected = selectedBar,
+                        onSelect = { selectedBar = it },
+                    )
                 }
             }
             // Concrete values, one small dot-column entry per sample, evenly spaced under the
@@ -183,11 +191,12 @@ private fun ChartCard(d: MetricDetail) {
             if (d.points.isNotEmpty() && d.points.size <= 14) {
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                    d.points.forEach { p ->
+                    d.points.forEachIndexed { i, p ->
                         Text(
                             text = d.metric.formatValue(p.value, d.system),
                             style = MaterialTheme.typography.labelSmall,
-                            color = d.metric.accent,
+                            color = if (selectedBar == null || selectedBar == i) d.metric.accent else d.metric.accent.copy(alpha = 0.35f),
+                            fontWeight = if (selectedBar == i) androidx.compose.ui.text.font.FontWeight.Bold else null,
                             maxLines = 1,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             modifier = Modifier.weight(1f),
