@@ -1,9 +1,13 @@
 name: Release
 
-# Tag a release: git tag v1.0.0 && git push --tags
+# 不自动发布：只有在 Actions 页面手动点击 "Run workflow" 时才构建并发布 release
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.2.6). Leave empty to auto-increment patch from latest v* tag.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -14,6 +18,8 @@ jobs:
     environment: release
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -58,13 +64,27 @@ jobs:
       - name: Build release APK
         run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
+      - name: Determine tag
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            LATEST=$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || echo "v0.0.0")
+            TAG=$(python3 -c "
+v='$LATEST'.lstrip('v').split('.')
+v[-1] = str(int(v[-1]) + 1) if v[-1].isdigit() else '1'
+print('v' + '.'.join(v))")
+          fi
+          echo "TAG=$TAG" >> $GITHUB_ENV
+          echo "Release tag: $TAG"
+
       - name: Collect APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/release/*.apk "dist/garpulse-${GITHUB_REF_NAME}.apk"
+          cp app/build/outputs/apk/release/*.apk "dist/garpulse-${TAG}.apk"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.TAG }}
           files: dist/*.apk
           generate_release_notes: true
