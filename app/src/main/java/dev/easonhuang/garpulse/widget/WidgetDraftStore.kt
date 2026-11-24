@@ -18,8 +18,10 @@ internal object WidgetDraftStore {
     private const val KEY_CONFIG = "config"
     private const val KEY_STAGED_AT = "staged_at"
 
-    /** A draft older than this is never auto-consumed on render (it belongs to the past). */
-    private const val FRESH_WINDOW_MS = 2 * 60 * 1000L
+    /** A draft older than this is never auto-consumed on render (it belongs to the past).
+     *  10 min: launchers that refuse requestPinAppWidget leave the user to add the widget
+     *  manually via the desktop's own widget picker, which takes longer than 2 min. */
+    private const val FRESH_WINDOW_MS = 10 * 60 * 1000L
 
     fun stage(context: Context, config: WidgetConfig) {
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

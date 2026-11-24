@@ -127,7 +127,9 @@ import java.time.format.DateTimeFormatter
 private const val REPO_URL = "https://github.com/addycloud/garpulse"
 
 /** Where users create a Garmin Personal API key (consumer key/secret pair). */
-private const val GARMIN_KEY_URL = "https://developer.garmin.com/garmin-connect-api/"
+private const val GARMIN_KEY_URL = "https://connectus.garmin.cn/modern/settings/personalApiToken"
+// Garmin China (国区) account issue page; offered as a second link since accounts differ.
+private const val GARMIN_KEY_URL_CN = "https://connect.garmin.cn/app/settings/personalApiToken"
 
 /** Persistent, on-screen outcome of the Garmin connection test. */
 private data class TestResult(val success: Boolean, val message: String)
@@ -447,6 +449,13 @@ fun SettingsScreen(
                                 }
                             }) {
                                 Text(stringResource(R.string.garmin_api_key_link))
+                            }
+                            TextButton(onClick = {
+                                runCatching {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GARMIN_KEY_URL_CN)))
+                                }
+                            }) {
+                                Text(stringResource(R.string.garmin_api_key_link_cn))
                             }
                             Spacer(Modifier.size(6.dp))
 

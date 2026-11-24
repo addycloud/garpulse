@@ -130,6 +130,7 @@
     <string name="summary_no_data">还没有记录到数据</string>
     <string name="summary_no_series">当前数据源下该指标暂无每日历史数据</string>
     <string name="garmin_api_key_link">如何获取 Personal API Key ↗</string>
+    <string name="garmin_api_key_link_cn">国区佳明密钥页 ↗</string>
     <string name="summary_empty_title">还没有目标数据</string>
     <string name="summary_empty_body">授权步数、能量、距离、运动、饮水量或爬楼层数后即可查看每周进度。</string>
     <string name="goal_dialog_title">%1$s 目标</string>
@@ -241,6 +242,7 @@
     <string name="widget_manager_add_to_home">添加到桌面</string>
     <string name="widget_manager_pin_hint">桌面会询问放置位置，随后打开小组件设置。</string>
     <string name="widget_manager_pin_unsupported">当前桌面不支持直接添加，请在桌面的小组件选择器中添加 GarPulse。</string>
+    <string name="widget_manager_pin_fallback">直接固定失败。你编辑的配置已保存——10 分钟内从桌面的小组件列表添加 GarPulse 小组件，会自动套用这份配置。</string>
     <string name="widget_manager_placed">已添加的小组件：%1$d 个</string>
     <string name="widget_manager_empty">还没有添加小组件。可在上方添加，或长按桌面。</string>
 

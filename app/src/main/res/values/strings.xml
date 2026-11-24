@@ -138,6 +138,7 @@
     <string name="summary_no_data">No data recorded yet</string>
     <string name="summary_no_series">No daily history for this metric in the current data source</string>
     <string name="garmin_api_key_link">How to get a Personal API Key ↗</string>
+    <string name="garmin_api_key_link_cn">Garmin China (国区) key page ↗</string>
     <string name="summary_empty_title">No goal-tracked data yet</string>
     <string name="summary_empty_body">Grant access to steps, energy, distance, exercise, hydration or floors to see weekly progress.</string>
     <string name="goal_dialog_title">%1$s goal</string>
@@ -253,6 +254,7 @@
     <string name="widget_manager_add_to_home">Add to home screen</string>
     <string name="widget_manager_pin_hint">Your launcher will ask where to place the widget, then open its settings.</string>
     <string name="widget_manager_pin_unsupported">This launcher does not support direct pinning. Add GarPulse from the widget picker instead.</string>
+    <string name="widget_manager_pin_fallback">Direct pinning failed. Your edited config is saved — add the widget from your desktop\'s widget picker within 10 minutes and it will use this config.</string>
     <string name="widget_manager_placed">Placed widgets: %1$d</string>
     <string name="widget_manager_empty">No widgets placed yet. Add one above, or long-press your home screen.</string>
 

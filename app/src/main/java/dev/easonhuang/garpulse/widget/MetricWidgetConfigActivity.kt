@@ -49,6 +49,7 @@ import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -193,10 +194,14 @@ class MetricWidgetConfigActivity : ComponentActivity() {
             flags,
         )
         val accepted = WidgetCatalog.pinUniversal(this, callback)
-        if (!accepted) {
-            WidgetDraftStore.clear(this)
-            Toast.makeText(this, getString(R.string.widget_manager_pin_unsupported), Toast.LENGTH_LONG).show()
+        if (accepted) {
+            finish()
+            return
         }
+        // The launcher refused (or doesn't support) pin requests — e.g. some OEM desktops.
+        // Keep the draft staged: the render-time fallback still applies it when the widget
+        // lands, no matter how it got added.
+        Toast.makeText(this, getString(R.string.widget_manager_pin_fallback), Toast.LENGTH_LONG).show()
         finish()
     }
 
@@ -932,19 +937,26 @@ private fun ChildSettings(title: String, content: @Composable ColumnScope.() -> 
 @Composable
 private fun AppPickerDialog(current: String?, onPick: (LauncherApp?) -> Unit, onDismiss: () -> Unit) {
     val context = LocalContext.current
-    val apps: List<LauncherApp> = remember {
+    // Loading the launcher list touches PackageManager and can take a beat on slow devices —
+    // do it off the first frame and show a spinner meanwhile.
+    var appsLoading by remember { mutableStateOf(true) }
+    var apps by remember { mutableStateOf<List<LauncherApp>>(emptyList()) }
+    LaunchedEffect(Unit) {
         val pm = context.packageManager
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        pm.queryIntentActivities(intent, 0)
-            .map { info ->
-                LauncherApp(
-                    packageName = info.activityInfo.packageName,
-                    label = info.loadLabel(pm).toString(),
-                    component = ComponentName(info.activityInfo.packageName, info.activityInfo.name).flattenToString(),
-                )
-            }
-            .distinctBy { it.packageName }
-            .sortedBy { it.label.lowercase() }
+        apps = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            pm.queryIntentActivities(intent, 0)
+                .map { info ->
+                    LauncherApp(
+                        packageName = info.activityInfo.packageName,
+                        label = info.loadLabel(pm).toString(),
+                        component = ComponentName(info.activityInfo.packageName, info.activityInfo.name).flattenToString(),
+                    )
+                }
+                .distinctBy { it.packageName }
+                .sortedBy { it.label.lowercase() }
+        }
+        appsLoading = false
     }
     var query by remember { mutableStateOf("") }
     var expandedPkg by remember { mutableStateOf<String?>(null) }
@@ -1030,6 +1042,16 @@ private fun AppPickerDialog(current: String?, onPick: (LauncherApp?) -> Unit, on
                 }
                 Spacer(Modifier.height(4.dp))
                 LazyColumn(Modifier.height(320.dp)) {
+                    if (appsLoading) {
+                        item {
+                            Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator()
+                            }
+                        }
+                    }
+                    // Built-in destinations (default / GarPulse screens) only make sense when
+                    // not searching — with a query they would sit between results forever.
+                    if (tokens.isEmpty()) {
                     item {
                         Row(
                             Modifier.fillMaxWidth().clickable { onPick(null) }.padding(10.dp),
@@ -1060,6 +1082,7 @@ private fun AppPickerDialog(current: String?, onPick: (LauncherApp?) -> Unit, on
                             Text(label)
                         }
                     }
+                    } // end built-ins (hidden while searching)
                     if (tokens.size == 1 && filtered.none { it.packageName == query.trim() }) {
                         item {
                             Row(
