@@ -61,7 +61,6 @@ import dev.easonhuang.garpulse.data.DashboardPreferences
 import dev.easonhuang.garpulse.data.UnitPreferences
 import dev.easonhuang.garpulse.data.HealthConnectManager
 import dev.easonhuang.garpulse.data.Metric
-import dev.easonhuang.garpulse.data.MetricSource
 import dev.easonhuang.garpulse.data.MetricSummary
 import dev.easonhuang.garpulse.data.title
 import dev.easonhuang.garpulse.ui.DashboardViewModel
@@ -90,8 +89,9 @@ fun DashboardScreen(
     val sourceState by app.metricSource.state.collectAsStateWithLifecycle(initialValue = null)
     // Badges are only meaningful when more than one source can be in play; the default
     // Health-Connect-only view stays visually calm.
-    val showSourceBadges = sourceState?.source == MetricSource.AUTO ||
-        sourceState?.source == MetricSource.GARMIN_API
+    // Badges are only meaningful when more than one source can be in play; the default
+    // Health-Connect-only view stays visually calm.
+    val showSourceBadges = (sourceState?.anyGarmin == true)
     val sparkBehind by dashboardPrefs.sparkBehind.collectAsStateWithLifecycle(initialValue = false)
     val effectiveShowSource = showSourceBadges
     val vm: DashboardViewModel = viewModel(

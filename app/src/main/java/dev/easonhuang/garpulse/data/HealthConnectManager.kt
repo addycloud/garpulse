@@ -96,13 +96,13 @@ class HealthConnectManager(
         HealthPermission.getReadPermission(recordClass(metric))
 
     suspend fun isGranted(metric: Metric): Boolean {
-        if (useGarmin()) return true
-        if (useAuto()) {
-            // In mirrored mode Garmin-only metrics are legitimately available; for shared ones
-            // either source granting access is enough to consider the tile usable.
+        val regions = garminRegions()
+        if (garminOnlyMode()) return metric.garminOnly || regions.isNotEmpty()
+        if (mirrored()) {
+            // Either source granting access is enough to consider the tile usable.
             if (metric.garminOnly) return true
             if (permissionFor(metric) in runCatching { grantedPermissions() }.getOrDefault(emptySet())) return true
-            return garmin!!.readDashboard().firstOrNull { it.metric == metric }?.hasData == true
+            return garminMergedDashboard().firstOrNull { it.metric == metric }?.hasData == true
         }
         if (metric.garminOnly) return false
         return permissionFor(metric) in runCatching { grantedPermissions() }.getOrDefault(emptySet())
@@ -121,19 +121,59 @@ class HealthConnectManager(
      *
      * Health Connect permission checks stay local and untouched in every mode.
      */
-    private suspend fun useGarmin(): Boolean =
-        sourcePrefs != null && garmin != null &&
-            sourcePrefs.state.first().source == MetricSource.GARMIN_API && garmin.configured()
+    /** Enabled + configured Garmin regions in the user's priority order. */
+    private suspend fun garminRegions(): List<GarminRegion> {
+        val sp = sourcePrefs ?: return emptyList()
+        val repo = garmin ?: return emptyList()
+        return sp.state.first().garminRegions.filter { region ->
+            runCatching { repo.configured(region) }.getOrDefault(false)
+        }
+    }
 
-    private suspend fun useAuto(): Boolean =
-        sourcePrefs != null && garmin != null && garmin.configured() &&
-            sourcePrefs.state.first().source == MetricSource.AUTO
+    /** Health Connect disabled and Garmin active: all reads delegate to Garmin. */
+    private suspend fun garminOnlyMode(): Boolean =
+        sourcePrefs != null && garmin != null &&
+            !sourcePrefs.state.first().hcActive && garminRegions().isNotEmpty()
+
+    /** Both Health Connect and at least one Garmin region active: merge per metric. */
+    private suspend fun mirrored(): Boolean =
+        sourcePrefs != null && garmin != null &&
+            sourcePrefs.state.first().hcActive && garminRegions().isNotEmpty()
+
+    /**
+     * Garmin dashboards across all enabled regions merged per metric: the first region
+     * (in priority order) that actually has data supplies the value.
+     */
+    private suspend fun garminMergedDashboard(system: UnitSystem = UnitSystem.METRIC): List<MetricSummary> {
+        val repo = garmin!!
+        var merged: Map<Metric, MetricSummary>? = null
+        for (region in garminRegions()) {
+            val list = runCatching { repo.readDashboard(system, region) }.getOrDefault(emptyList())
+            val byMetric = list.associateBy { it.metric }
+            merged = when (val soFar = merged) {
+                null -> byMetric
+                else -> soFar.mapValues { (metric, existing) ->
+                    if (existing.hasData) existing else (byMetric[metric] ?: existing)
+                }
+            }
+        }
+        return merged?.values?.toList() ?: emptyList()
+    }
+
+    /** First enabled Garmin region (by priority) whose detail actually has a headline. */
+    private suspend fun garminMergedDetail(metric: Metric, system: UnitSystem = UnitSystem.METRIC): MetricDetail? {
+        val repo = garmin!!
+        for (region in garminRegions()) {
+            val detail = runCatching { repo.readDetail(metric, system, region) }.getOrNull() ?: continue
+            if (detail.headline != "-") return detail
+        }
+        return null
+    }
 
     /** Which source actually supplies [metric]'s series under the current mode and priority. */
     suspend fun sourceFor(metric: Metric, system: UnitSystem = UnitSystem.METRIC): ValueSource = when {
-        useGarmin() -> ValueSource.GARMIN_API
-        !useAuto() -> ValueSource.HEALTH_CONNECT
-        // Mirrored AUTO mode: whatever the local source cannot supply comes from Garmin.
+        garminOnlyMode() -> ValueSource.GARMIN_API
+        !mirrored() -> ValueSource.HEALTH_CONNECT
         metric.garminOnly -> ValueSource.GARMIN_API
         else -> when (metric.kind) {
             MetricKind.DAILY_TOTAL ->
@@ -148,16 +188,13 @@ class HealthConnectManager(
     // ---- Dashboard -----------------------------------------------------------------------------
 
     suspend fun readDashboard(system: UnitSystem = UnitSystem.METRIC): List<MetricSummary> {
-        if (useGarmin()) return garmin!!.readDashboard(system)
+        if (garminOnlyMode()) return garminMergedDashboard(system)
         val local = readLocalDashboard(system)
-        if (!useAuto()) return local
+        if (!mirrored()) return local
         // Mirrored mode: fill any metric the local source could not supply with the Garmin value.
-        // Which source wins when BOTH have data is user-configurable (source priority): by
-        // default the local (synced Health Connect) reading stays authoritative, but with
-        // Garmin priority enabled a fresh Garmin reading takes precedence whenever it has data.
-        val preferGarmin = sourcePrefs!!.state.first().garminPriority
-        val remote = runCatching { garmin!!.readDashboard(system) }.getOrDefault(emptyList())
-            .associateBy { it.metric }
+        // Which source wins when BOTH have data follows the user's source priority order.
+        val preferGarmin = sourcePrefs!!.state.first().garminBeforeHc
+        val remote = garminMergedDashboard(system).associateBy { it.metric }
         return local.map { l ->
             val g = remote[l.metric]
             when {
@@ -272,17 +309,14 @@ class HealthConnectManager(
     // ---- Detail --------------------------------------------------------------------------------
 
     suspend fun readDetail(metric: Metric, system: UnitSystem = UnitSystem.METRIC): MetricDetail {
-        if (useGarmin()) return garmin!!.readDetail(metric, system)
+        if (garminOnlyMode()) return garminMergedDetail(metric, system)
+            ?: MetricDetail(metric, "-", str(R.string.no_data_recorded), emptyList(), system = system)
         val local = readLocalDetail(metric, system)
-        if (!useAuto()) return local
-        // Prefer whichever source actually has a headline. With Garmin priority enabled a
-        // Garmin headline wins even when the local one exists.
-        if (local.headline == "-") {
-            val remote = runCatching { garmin!!.readDetail(metric, system) }.getOrNull()
-            if (remote != null && remote.headline != "-") return remote
-        } else if (sourcePrefs!!.state.first().garminPriority) {
-            val remote = runCatching { garmin!!.readDetail(metric, system) }.getOrNull()
-            if (remote != null && remote.headline != "-") return remote
+        if (!mirrored()) return local
+        // Prefer whichever source actually has a headline, honouring the priority order.
+        if (local.headline == "-" || sourcePrefs!!.state.first().garminBeforeHc) {
+            val remote = garminMergedDetail(metric, system)
+            if (remote != null) return remote
         }
         return local
     }
@@ -392,12 +426,23 @@ class HealthConnectManager(
         days: Int,
         system: UnitSystem = UnitSystem.METRIC,
     ): List<SeriesPoint> {
-        if (useGarmin()) return garmin!!.readDailySeries(metric, days, system)
+        if (garminOnlyMode()) {
+            for (region in garminRegions()) {
+                val pts = runCatching { garmin!!.readDailySeries(metric, days, system, region) }.getOrDefault(emptyList())
+                if (pts.isNotEmpty()) return pts
+            }
+            return emptyList()
+        }
         val local = if (metric.garminOnly) emptyList()
         else if (metric.kind == MetricKind.DAILY_TOTAL) series(metric, days, system) else emptyList()
         if (local.isNotEmpty()) return local
         // Mirrored mode: a metric with no local series can still be charted from Garmin.
-        if (useAuto()) return runCatching { garmin!!.readDailySeries(metric, days, system) }.getOrDefault(emptyList())
+        if (mirrored()) {
+            for (region in garminRegions()) {
+                val pts = runCatching { garmin!!.readDailySeries(metric, days, system, region) }.getOrDefault(emptyList())
+                if (pts.isNotEmpty()) return pts
+            }
+        }
         return local
     }
 

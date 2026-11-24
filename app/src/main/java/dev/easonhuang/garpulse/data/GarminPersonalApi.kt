@@ -10,8 +10,14 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 
-const val GARMIN_BASE_URL: String = "https://personal.connectapi.garmin.com"
 const val GARMIN_TOKEN_PATH: String = "/personalapitoken-service/personal-api/personal-api-key/token"
+
+/** Per-region Personal API hosts. The token and data endpoints share the same paths. */
+val GarminRegion.baseUrl: String
+    get() = when (this) {
+        GarminRegion.GLOBAL -> "https://personal.connectapi.garmin.com"
+        GarminRegion.CN -> "https://personal.connectapi.garmin.cn"
+    }
 
 class GarminApiException(message: String, val status: Int = 0) : IOException(message)
 
@@ -35,13 +41,13 @@ internal fun jwtExpirySeconds(jwt: String): Long {
 class GarminPersonalApi(private val prefs: MetricSourcePreferences) {
 
     /** Returns a cached token while it has over an hour left, otherwise requests a new one. */
-    suspend fun token(force: Boolean = false): String = withContext(Dispatchers.IO) {
+    suspend fun token(region: GarminRegion, force: Boolean = false): String = withContext(Dispatchers.IO) {
         val state = prefs.state.first()
-        if (!force && state.tokenUsable) return@withContext state.token
-        val key = state.apiKey.trim()
-        if (key.isEmpty()) throw GarminApiException("No Garmin Personal API key configured")
+        if (!force && state.tokenUsable(region)) return@withContext state.token(region)
+        val key = state.apiKey(region).trim()
+        if (key.isEmpty()) throw GarminApiException("No Garmin Personal API key configured for $region")
 
-        val connection = open(GARMIN_BASE_URL + GARMIN_TOKEN_PATH, "POST")
+        val connection = open(region.baseUrl + GARMIN_TOKEN_PATH, "POST")
         try {
             connection.setRequestProperty("Authorization", "ApiKey $key")
             connection.setRequestProperty("Accept", "*/*")
@@ -52,7 +58,7 @@ class GarminPersonalApi(private val prefs: MetricSourcePreferences) {
             val jwt = body.trim()
             val expiresAt = jwtExpirySeconds(jwt)
             if (expiresAt <= 0L) throw GarminApiException("Garmin returned an unreadable access token")
-            prefs.saveToken(jwt, expiresAt * 1000L)
+            prefs.saveToken(region, jwt, expiresAt * 1000L)
             jwt
         } finally {
             connection.disconnect()
@@ -60,14 +66,14 @@ class GarminPersonalApi(private val prefs: MetricSourcePreferences) {
     }
 
     /** GETs one endpoint as raw JSON text; empty successful responses become an empty string. */
-    suspend fun get(path: String, params: Map<String, String> = emptyMap()): String = withContext(Dispatchers.IO) {
+    suspend fun get(region: GarminRegion, path: String, params: Map<String, String> = emptyMap()): String = withContext(Dispatchers.IO) {
         val query = params.entries.joinToString("&") { (k, v) ->
             "${java.net.URLEncoder.encode(k, "UTF-8")}=${java.net.URLEncoder.encode(v, "UTF-8")}"
         }
-        val url = GARMIN_BASE_URL + path + if (query.isEmpty()) "" else "?$query"
+        val url = region.baseUrl + path + if (query.isEmpty()) "" else "?$query"
         var lastError: GarminApiException? = null
         repeat(2) { attempt ->
-            val token = token(force = attempt > 0)
+            val token = token(region, force = attempt > 0)
             val connection = open(url, "GET")
             try {
                 connection.setRequestProperty("Authorization", "Bearer $token")
@@ -86,9 +92,9 @@ class GarminPersonalApi(private val prefs: MetricSourcePreferences) {
     }
 
     /** Forces a fresh token and reads the profile endpoint, used by the settings "Test" button. */
-    suspend fun testConnection(): JSONObject = withContext(Dispatchers.IO) {
-        val token = token(force = true)
-        val connection = open(GARMIN_BASE_URL + "/userprofile-service/userprofile/settings", "GET")
+    suspend fun testConnection(region: GarminRegion): JSONObject = withContext(Dispatchers.IO) {
+        val token = token(region, force = true)
+        val connection = open(region.baseUrl + "/userprofile-service/userprofile/settings", "GET")
         try {
             connection.setRequestProperty("Authorization", "Bearer $token")
             connection.setRequestProperty("Accept", "application/json")

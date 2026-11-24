@@ -204,11 +204,14 @@ class GarminMetricRepository(
 
     suspend fun configured(): Boolean = prefs.state.first().hasKey
 
+    suspend fun configured(region: GarminRegion): Boolean =
+        prefs.state.first().apiKey(region).isNotBlank()
+
     /** Returns a cached snapshot for one minute so dashboard + widget refresh share one fetch. */
-    private suspend fun snapshot(force: Boolean = false): GarminSnapshot = mutex.withLock {
+    private suspend fun snapshot(region: GarminRegion, force: Boolean = false): GarminSnapshot = mutex.withLock {
         val age = System.currentTimeMillis() - cachedAt
         if (!force && cached != null && age in 0..60_000L) return@withLock cached!!
-        val loaded = load()
+        val loaded = load(region)
         if (loaded.days.isNotEmpty()) {
             cached = loaded
             cachedAt = System.currentTimeMillis()
@@ -221,7 +224,7 @@ class GarminMetricRepository(
         cachedAt = 0L
     }
 
-    private suspend fun load(): GarminSnapshot = coroutineScope {
+    private suspend fun load(region: GarminRegion): GarminSnapshot = coroutineScope {
         val today = LocalDate.now()
         val start = today.minusDays(6)
         val s = start.toString()
@@ -234,35 +237,35 @@ class GarminMetricRepository(
 
         val summaries = async(Dispatchers.IO) {
             call("daily summaries") {
-                parseDailySummaries(api.get("/usersummary-service/v2/dailysummaries",
+                parseDailySummaries(api.get(region, "/usersummary-service/v2/dailysummaries",
                     mapOf("startDate" to s, "endDate" to e)))
             }
         }
         val sleepSummaries = async(Dispatchers.IO) {
             call("sleep summaries") {
-                parseSleepSummaries(api.get("/sleep-service/sleep/dailySleepSummariesByDate",
+                parseSleepSummaries(api.get(region, "/sleep-service/sleep/dailySleepSummariesByDate",
                     mapOf("startDate" to s, "endDate" to e)))
             }
         }
         val sleepToday = async(Dispatchers.IO) {
             call("sleep") {
-                parseDailySleep(api.get("/sleep-service/sleep/dailySleep", mapOf("date" to e)))
+                parseDailySleep(api.get(region, "/sleep-service/sleep/dailySleep", mapOf("date" to e)))
             }
         }
         val hrvSummaries = async(Dispatchers.IO) {
-            call("HRV") { parseHrvSummaries(api.get("/hrv-service/hrv/daily/$s/$e")) }
+            call("HRV") { parseHrvSummaries(api.get(region, "/hrv-service/hrv/daily/$s/$e")) }
         }
         val hrvToday = async(Dispatchers.IO) {
-            call("last night HRV") { parseDailyHrv(api.get("/hrv-service/hrv/$e")) }
+            call("last night HRV") { parseDailyHrv(api.get(region, "/hrv-service/hrv/$e")) }
         }
         val heart = async(Dispatchers.IO) {
             call("heart rate") {
-                parseHeartRate(api.get("/wellness-service/wellness/dailyHeartRate", mapOf("date" to e)))
+                parseHeartRate(api.get(region, "/wellness-service/wellness/dailyHeartRate", mapOf("date" to e)))
             }
         }
         val weights = async(Dispatchers.IO) {
             call("weight") {
-                parseWeights(api.get("/weight-service/weight/range/$s/$e", mapOf("includeAll" to "true")))
+                parseWeights(api.get(region, "/weight-service/weight/range/$s/$e", mapOf("includeAll" to "true")))
             }
         }
 
@@ -342,15 +345,16 @@ class GarminMetricRepository(
         metric: Metric,
         days: Int,
         system: UnitSystem = UnitSystem.METRIC,
+        region: GarminRegion = GarminRegion.GLOBAL,
     ): List<SeriesPoint> {
-        if (!configured()) return emptyList()
-        val snapshot = runCatching { snapshot() }.getOrNull() ?: return emptyList()
+        if (!configured(region)) return emptyList()
+        val snapshot = runCatching { snapshot(region) }.getOrNull() ?: return emptyList()
         return series(metric, snapshot, system).takeLast(days)
     }
 
-    suspend fun readDashboard(system: UnitSystem = UnitSystem.METRIC): List<MetricSummary> {
+    suspend fun readDashboard(system: UnitSystem = UnitSystem.METRIC, region: GarminRegion = GarminRegion.GLOBAL): List<MetricSummary> {
         if (!configured()) return emptySummaries(system)
-        val snapshot = runCatching { snapshot() }.getOrNull() ?: return emptySummaries(system)
+        val snapshot = runCatching { snapshot(region) }.getOrNull() ?: return emptySummaries(system)
         return Metric.entries.map { metric -> summary(metric, snapshot, system) }
     }
 
@@ -384,9 +388,9 @@ class GarminMetricRepository(
         )
     }
 
-    suspend fun readDetail(metric: Metric, system: UnitSystem = UnitSystem.METRIC): MetricDetail {
+    suspend fun readDetail(metric: Metric, system: UnitSystem = UnitSystem.METRIC, region: GarminRegion = GarminRegion.GLOBAL): MetricDetail {
         if (!configured()) return noDetail(metric, system)
-        val snapshot = runCatching { snapshot() }.getOrNull() ?: return noDetail(metric, system)
+        val snapshot = runCatching { snapshot(region) }.getOrNull() ?: return noDetail(metric, system)
         val points = series(metric, snapshot, system)
         if (points.isEmpty()) return noDetail(metric, system)
         val values = points.map { it.value }
@@ -449,9 +453,9 @@ class GarminMetricRepository(
         )
 
     /** Manual "sync now" from settings bypasses the short-lived cache. */
-    suspend fun refresh(): GarminSnapshot? {
-        if (!configured()) return null
+    suspend fun refresh(region: GarminRegion = GarminRegion.GLOBAL): GarminSnapshot? {
+        if (!prefs.state.first().apiKey(region).isNotBlank()) return null
         invalidate()
-        return runCatching { snapshot(force = true) }.getOrNull()
+        return runCatching { snapshot(region, force = true) }.getOrNull()
     }
 }

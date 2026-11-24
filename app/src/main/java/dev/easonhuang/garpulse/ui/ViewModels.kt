@@ -9,7 +9,6 @@ import dev.easonhuang.garpulse.data.DashboardPreferences
 import dev.easonhuang.garpulse.data.HealthConnectManager
 import dev.easonhuang.garpulse.data.Metric
 import dev.easonhuang.garpulse.data.MetricDetail
-import dev.easonhuang.garpulse.data.MetricSource
 import dev.easonhuang.garpulse.data.MetricSummary
 import dev.easonhuang.garpulse.data.MetricSourcePreferences
 import dev.easonhuang.garpulse.data.UnitPreferences
@@ -79,7 +78,7 @@ class DashboardViewModel(
                 // Only re-read when the source, key presence OR priority actually changes, not
                 // on every sync-status write (which would otherwise cause a refresh loop).
                 sourcePrefs.state
-                    .map { Triple(it.source, it.hasKey, it.garminPriority) }
+                    .map { Triple(it.hcEnabled to it.globalEnabled to it.cnEnabled, it.hasKey, it.order) }
                     .distinctUntilChanged()
                     .drop(1)
                     .collect { load(units.system.first()) }

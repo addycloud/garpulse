@@ -59,6 +59,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -108,19 +109,22 @@ import dev.easonhuang.garpulse.data.ExportFormat
 import dev.easonhuang.garpulse.data.ExportManager
 import dev.easonhuang.garpulse.data.AppLanguage
 import dev.easonhuang.garpulse.data.DashboardPreferences
+import dev.easonhuang.garpulse.data.GarminRegion
+import dev.easonhuang.garpulse.data.SOURCE_ID_HC
 import dev.easonhuang.garpulse.data.HealthConnectManager
 import dev.easonhuang.garpulse.data.LanguagePreferences
 import dev.easonhuang.garpulse.data.Metric
-import dev.easonhuang.garpulse.data.MetricSource
 import dev.easonhuang.garpulse.data.UnitPreferences
 import dev.easonhuang.garpulse.data.UnitSystem
 import dev.easonhuang.garpulse.ui.components.HelpButton
+import dev.easonhuang.garpulse.update.AppUpdateChecker
 import dev.easonhuang.garpulse.widget.WidgetUpdateScheduler
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import java.time.Instant
 import java.time.LocalDateTime
+import java.io.File
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -132,7 +136,7 @@ private const val GARMIN_KEY_URL = "https://connectus.garmin.cn/modern/settings/
 private const val GARMIN_KEY_URL_CN = "https://connect.garmin.cn/app/settings/personalApiToken"
 
 /** Persistent, on-screen outcome of the Garmin connection test. */
-private data class TestResult(val success: Boolean, val message: String)
+private data class TestResult(val success: Boolean, val message: String, val region: GarminRegion? = null)
 
 /** The six selectable launcher logos, each an activity alias carrying the LAUNCHER intent-filter.
  *  The Dark/Light alias names are retained for upgrade compatibility; they now carry the heart
@@ -194,9 +198,14 @@ fun SettingsScreen(
     var showFormatDialog by remember { mutableStateOf(false) }
     var showUnitsDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
-    var showSourceDialog by remember { mutableStateOf(false) }
     var showColumnsDialog by remember { mutableStateOf(false) }
     var showIconDialog by remember { mutableStateOf(false) }
+    var showIntervalDialog by remember { mutableStateOf(false) }
+    var showTimesDialog by remember { mutableStateOf(false) }
+    var timesInput by remember { mutableStateOf("") }
+    var updateStatus by remember { mutableStateOf<String?>(null) }
+    var updateChecking by remember { mutableStateOf(false) }
+    var updateReady by remember { mutableStateOf<Pair<File, String>?>(null) }
     var currentIcon by remember { mutableStateOf(currentLauncherIcon(context)) }
     val overviewColumns by dashboardPrefs.columns.collectAsStateWithLifecycle(
         initialValue = DashboardPreferences.DEFAULT_COLUMNS,
@@ -210,69 +219,103 @@ fun SettingsScreen(
     // The key is never pre-filled into a visible field. Editing starts from blank; leaving the
     // field blank on save means "keep the current key", so its value is never echoed in the UI.
     var keyInput by remember { mutableStateOf("") }
-    var editingKey by remember { mutableStateOf(false) }
+    var editingRegion by remember { mutableStateOf<GarminRegion?>(null) }
     var testing by remember { mutableStateOf(false) }
     // Result is kept on screen (not a transient snackbar) so the user can actually read it.
     var testResult by remember { mutableStateOf<TestResult?>(null) }
-    LaunchedEffect(sourceState?.apiKey) { keyInput = "" }
-    LaunchedEffect(sourceState?.source) { testResult = null }
+    LaunchedEffect(sourceState?.globalKey, sourceState?.cnKey) { keyInput = "" }
 
-    suspend fun applySourceChange(source: MetricSource) {
-        app.metricSource.setSource(source)
-        app.garminMetrics.invalidate()
-        WidgetUpdateScheduler.refreshNow(context)
-        snackbar.showSnackbar(resources.getString(R.string.garmin_api_source_switched))
-    }
-
-    suspend fun saveKey() {
+    suspend fun saveKey(region: GarminRegion) {
         if (keyInput.isBlank()) return
-        app.metricSource.setApiKey(keyInput)
+        app.metricSource.setApiKey(region, keyInput)
         keyInput = ""
-        editingKey = false
+        editingRegion = null
         testResult = null
         app.garminMetrics.invalidate()
         WidgetUpdateScheduler.refreshNow(context)
         snackbar.showSnackbar(resources.getString(R.string.garmin_api_key_saved))
     }
 
-    suspend fun clearKey() {
-        app.metricSource.setApiKey("")
+    suspend fun clearKey(region: GarminRegion) {
+        app.metricSource.setApiKey(region, "")
         keyInput = ""
-        editingKey = false
+        editingRegion = null
         testResult = null
         app.garminMetrics.invalidate()
         WidgetUpdateScheduler.refreshNow(context)
         snackbar.showSnackbar(resources.getString(R.string.garmin_api_key_cleared))
     }
 
-    suspend fun testGarmin() {
+    suspend fun testGarmin(region: GarminRegion) {
         // Test always uses the stored key. If the user typed a new one, persist it first.
         if (keyInput.isNotBlank()) {
-            app.metricSource.setApiKey(keyInput)
+            app.metricSource.setApiKey(region, keyInput)
             app.garminMetrics.invalidate()
         }
-        if (!app.metricSource.state.first().hasKey) {
-            testResult = TestResult(false, resources.getString(R.string.garmin_api_no_key))
+        if (app.metricSource.snapshot().apiKey(region).isBlank()) {
+            testResult = TestResult(false, resources.getString(R.string.garmin_api_no_key), region)
             return
         }
         testing = true
         val result = runCatching {
-            val profile = app.garminApi.testConnection()
+            val profile = app.garminApi.testConnection(region)
             val name = profile.optString("displayName", "").ifBlank {
                 profile.optString("ownerFullName", "Garmin")
             }
-            app.garminMetrics.refresh()
+            app.garminMetrics.refresh(region)
             WidgetUpdateScheduler.refreshNow(context)
             TestResult(
                 success = true,
                 message = resources.getString(R.string.garmin_api_test_success, name) +
                     "\n" + resources.getString(R.string.garmin_api_test_success_hint),
+                region = region,
             )
-        }.getOrElse { error -> TestResult(false, resources.getString(R.string.garmin_api_error, error.message.orEmpty())) }
+        }.getOrElse { error -> TestResult(false, resources.getString(R.string.garmin_api_error, error.message.orEmpty()), region) }
         testing = false
         keyInput = ""
-        editingKey = false
+        editingRegion = null
         testResult = result
+    }
+
+    fun checkForUpdates() {
+        if (updateChecking) return
+        scope.launch {
+            updateChecking = true
+            updateStatus = resources.getString(R.string.update_checking)
+            try {
+                val probes = AppUpdateChecker.probe()
+                val fastest = probes.fastest
+                if (fastest == null) {
+                    updateStatus = resources.getString(R.string.update_no_network)
+                    return@launch
+                }
+                var latest = AppUpdateChecker.fetchLatest(fastest)
+                val via = fastest
+                if (latest == null) {
+                    val other = if (via == "github") "gitee" else "github"
+                    latest = AppUpdateChecker.fetchLatest(other)
+                }
+                if (latest == null) {
+                    updateStatus = resources.getString(R.string.update_no_network)
+                    return@launch
+                }
+                if (AppUpdateChecker.isNewer(latest.versionName, BuildConfig.VERSION_NAME)) {
+                    updateStatus = resources.getString(R.string.update_found, latest.versionName, latest.mirror)
+                    val dir = File(context.cacheDir, "updates").apply { mkdirs() }
+                    val apk = AppUpdateChecker.download(latest.apkUrl, File(dir, "garpulse-${latest.versionName}.apk"))
+                    if (apk != null) {
+                        updateReady = apk to latest.mirror
+                        updateStatus = null
+                    } else {
+                        updateStatus = resources.getString(R.string.update_download_failed)
+                    }
+                } else {
+                    updateStatus = resources.getString(R.string.update_latest, BuildConfig.VERSION_NAME)
+                }
+            } finally {
+                updateChecking = false
+            }
+        }
     }
 
     suspend fun runExport(uri: Uri, format: ExportFormat) {
@@ -340,6 +383,35 @@ fun SettingsScreen(
             }
             item {
                 SectionLabel(
+                    stringResource(R.string.settings_widget_updates),
+                    R.string.help_settings_data_title,
+                    R.array.help_settings_data,
+                )
+            }
+            item {
+                SettingsCard {
+                    val interval = WidgetUpdateScheduler.intervalMinutes(context)
+                    val times = WidgetUpdateScheduler.fixedTimes(context)
+                    SettingRow(
+                        icon = Icons.Rounded.CloudSync,
+                        title = stringResource(R.string.settings_widget_interval),
+                        subtitle = stringResource(R.string.settings_widget_interval_summary, interval),
+                        onClick = { showIntervalDialog = true },
+                    )
+                    SettingsDivider()
+                    SettingRow(
+                        icon = Icons.Rounded.CloudSync,
+                        title = stringResource(R.string.settings_widget_fixed),
+                        subtitle = times.joinToString(", ").ifBlank { stringResource(R.string.settings_widget_fixed_off) },
+                        onClick = {
+                            timesInput = times.joinToString(",")
+                            showTimesDialog = true
+                        },
+                    )
+                }
+            }
+            item {
+                SectionLabel(
                     stringResource(R.string.settings_data_source),
                     R.string.help_settings_source_title,
                     R.array.help_settings_source,
@@ -347,8 +419,8 @@ fun SettingsScreen(
             }
             item {
                 SettingsCard {
-                    val selected = sourceState?.source ?: MetricSource.HEALTH_CONNECT
-                    // Prominent, colour-coded "where values come from" banner.
+                    val current = sourceState
+                    // Summary banner: enabled sources in priority order.
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
                         Text(
                             stringResource(R.string.settings_current_source),
@@ -356,182 +428,158 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(Modifier.size(8.dp))
-                        SourcePill(
-                            label = stringResource(selected.labelRes),
-                            color = sourceColor(selected),
+                        val enabledNames = current?.order.orEmpty().mapNotNull { id ->
+                            when (id) {
+                                SOURCE_ID_HC -> if (current?.hcEnabled == true)
+                                    stringResource(R.string.source_health_connect) else null
+                                GarminRegion.GLOBAL.id -> if (current?.globalEnabled == true)
+                                    stringResource(R.string.source_garmin_global) else null
+                                GarminRegion.CN.id -> if (current?.cnEnabled == true)
+                                    stringResource(R.string.source_garmin_cn) else null
+                                else -> null
+                            }
+                        }
+                        Text(
+                            enabledNames.joinToString(" → ").ifBlank { stringResource(R.string.settings_no_source_enabled) },
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
                         )
                         Spacer(Modifier.size(6.dp))
                         Text(
-                            stringResource(selected.descriptionRes),
+                            stringResource(R.string.settings_source_priority_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     SettingsDivider()
-                    SettingRow(
-                        icon = Icons.Rounded.CloudSync,
-                        title = stringResource(R.string.settings_data_source),
-                        subtitle = stringResource(R.string.settings_garmin_api_hint),
-                        onClick = { showSourceDialog = true },
+
+                    // One row per source: enable switch + priority arrows. Garmin rows expand
+                    // to their key management area when enabled.
+                    val rows = listOf(
+                        Triple(SOURCE_ID_HC, R.string.source_health_connect, Icons.Rounded.MonitorHeart),
+                        Triple(GarminRegion.GLOBAL.id, R.string.source_garmin_global, Icons.Rounded.CloudSync),
+                        Triple(GarminRegion.CN.id, R.string.source_garmin_cn, Icons.Rounded.CloudSync),
                     )
-                    if (selected == MetricSource.AUTO) {
-                        SettingsDivider()
-                        val garminPriority = sourceState?.garminPriority == true
-                        var priorityMenu by remember { mutableStateOf(false) }
-
-                        // Switching priority must take effect everywhere at once: the in-app
-                        // dashboard re-reads via the invalidated repository, the widgets refresh
-                        // immediately, and the user gets a visible confirmation.
-                        suspend fun applyPriority(garminFirst: Boolean) {
-                            app.metricSource.setGarminPriority(garminFirst)
-                            app.garminMetrics.invalidate()
-                            WidgetUpdateScheduler.refreshNow(context)
-                            snackbar.showSnackbar(
-                                resources.getString(
-                                    if (garminFirst) R.string.settings_source_priority_garmin
-                                    else R.string.settings_source_priority_hc,
-                                ),
-                            )
+                    rows.forEach { (id, labelRes, icon) ->
+                        val enabled = when (id) {
+                            SOURCE_ID_HC -> current?.hcEnabled ?: true
+                            GarminRegion.GLOBAL.id -> current?.globalEnabled ?: false
+                            else -> current?.cnEnabled ?: false
                         }
-
-                        SettingRow(
-                            icon = Icons.Rounded.SwapVert,
-                            title = stringResource(R.string.settings_source_priority),
-                            subtitle = stringResource(
-                                if (garminPriority) R.string.settings_source_priority_garmin
-                                else R.string.settings_source_priority_hc,
-                            ),
-                            onClick = { priorityMenu = true },
-                            trailing = {
-                                Box {
-                                    Text(
-                                        stringResource(
-                                            if (garminPriority) R.string.priority_garmin
-                                            else R.string.priority_hc,
-                                        ),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
-                                    DropdownMenu(
-                                        expanded = priorityMenu,
-                                        onDismissRequest = { priorityMenu = false },
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.priority_garmin)) },
-                                            onClick = {
-                                                priorityMenu = false
-                                                scope.launch { applyPriority(true) }
-                                            },
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.priority_hc)) },
-                                            onClick = {
-                                                priorityMenu = false
-                                                scope.launch { applyPriority(false) }
-                                            },
-                                        )
+                        val first = current?.order?.firstOrNull()
+                        SourceRow(
+                            title = stringResource(labelRes),
+                            icon = icon,
+                            enabled = enabled,
+                            isFirst = first == id,
+                            onToggle = { on ->
+                                scope.launch {
+                                    when (id) {
+                                        SOURCE_ID_HC -> app.metricSource.setHcEnabled(on)
+                                        GarminRegion.GLOBAL.id -> app.metricSource.setRegionEnabled(GarminRegion.GLOBAL, on)
+                                        else -> app.metricSource.setRegionEnabled(GarminRegion.CN, on)
                                     }
+                                    app.garminMetrics.invalidate()
+                                    WidgetUpdateScheduler.refreshNow(context)
                                 }
                             },
+                            onMoveUp = { scope.launch { app.metricSource.moveUp(id); WidgetUpdateScheduler.refreshNow(context) } },
+                            onMoveDown = { scope.launch { app.metricSource.moveDown(id); WidgetUpdateScheduler.refreshNow(context) } },
                         )
-                    }
+                        if (id == SOURCE_ID_HC) SettingsDivider()
 
-                    if (selected != MetricSource.HEALTH_CONNECT) {
-                        SettingsDivider()
-                        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                            SectionCaption(stringResource(R.string.settings_garmin_api))
-                            Spacer(Modifier.size(10.dp))
-
-                            // Direct jump to the page where the personal key is issued.
-                            TextButton(onClick = {
-                                runCatching {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GARMIN_KEY_URL)))
-                                }
-                            }) {
-                                Text(stringResource(R.string.garmin_api_key_link))
-                            }
-                            TextButton(onClick = {
-                                runCatching {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GARMIN_KEY_URL_CN)))
-                                }
-                            }) {
-                                Text(stringResource(R.string.garmin_api_key_link_cn))
-                            }
-                            Spacer(Modifier.size(6.dp))
-
-                            if (hasSavedKey && !editingKey) {
-                                // Key is stored but never displayed. Only an explicit action reveals
-                                // an (empty) input, so the value cannot leak onto the screen.
-                                KeyStatusRow(onChange = { editingKey = true })
-                            } else {
-                                OutlinedTextField(
-                                    value = keyInput,
-                                    onValueChange = { keyInput = it },
-                                    label = { Text(stringResource(R.string.garmin_api_key_label)) },
-                                    placeholder = { Text(stringResource(R.string.garmin_api_key_placeholder)) },
-                                    singleLine = true,
-                                    visualTransformation = PasswordVisualTransformation(),
-                                    keyboardOptions = KeyboardOptions(
-                                        keyboardType = KeyboardType.Password,
-                                        imeAction = ImeAction.Done,
-                                    ),
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                Spacer(Modifier.size(8.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(
-                                        onClick = { scope.launch { saveKey() } },
-                                        enabled = keyInput.isNotBlank(),
-                                    ) { Text(stringResource(R.string.garmin_api_key_save)) }
-                                    TextButton(onClick = {
-                                        keyInput = ""
-                                        editingKey = hasSavedKey
-                                    }) { Text(stringResource(R.string.garmin_api_key_cancel)) }
-                                }
-                            }
-
-                            Spacer(Modifier.size(12.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilledTonalButton(
-                                    onClick = { scope.launch { testGarmin() } },
-                                    enabled = !testing,
-                                ) {
-                                    Icon(Icons.Rounded.NetworkCheck, null, Modifier.size(18.dp))
-                                    Spacer(Modifier.size(6.dp))
-                                    Text(stringResource(if (testing) R.string.garmin_api_testing else R.string.garmin_api_test))
-                                }
+                        // Garmin rows: key management per region, shown only when enabled.
+                        val region = GarminRegion.fromId(id)
+                        if (region != null && enabled) {
+                            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                val saved = current?.apiKey(region)?.isNotBlank() == true
+                                // Direct jumps to the region's key-issue page.
                                 TextButton(onClick = {
-                                    scope.launch { app.garminMetrics.refresh(); WidgetUpdateScheduler.refreshNow(context) }
-                                }) { Text(stringResource(R.string.garmin_api_sync_now)) }
-                                if (hasSavedKey) {
-                                    TextButton(onClick = { scope.launch { clearKey() } }) {
-                                        Text(stringResource(R.string.garmin_api_key_clear))
+                                    runCatching {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(
+                                            if (region == GarminRegion.GLOBAL) GARMIN_KEY_URL else GARMIN_KEY_URL_CN
+                                        )))
+                                    }
+                                }) {
+                                    Text(stringResource(if (region == GarminRegion.GLOBAL) R.string.garmin_api_key_link else R.string.garmin_api_key_link_cn))
+                                }
+                                if (saved && editingRegion != region) {
+                                    KeyStatusRow(onChange = { editingRegion = region })
+                                } else {
+                                    OutlinedTextField(
+                                        value = keyInput,
+                                        onValueChange = { keyInput = it },
+                                        label = { Text(stringResource(R.string.garmin_api_key_label)) },
+                                        placeholder = { Text(stringResource(R.string.garmin_api_key_placeholder)) },
+                                        singleLine = true,
+                                        visualTransformation = PasswordVisualTransformation(),
+                                        keyboardOptions = KeyboardOptions(
+                                            keyboardType = KeyboardType.Password,
+                                            imeAction = ImeAction.Done,
+                                        ),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                    Spacer(Modifier.size(8.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Button(
+                                            onClick = { scope.launch { saveKey(region) } },
+                                            enabled = keyInput.isNotBlank(),
+                                        ) { Text(stringResource(R.string.garmin_api_key_save)) }
+                                        TextButton(onClick = {
+                                            keyInput = ""
+                                            editingRegion = null
+                                        }) { Text(stringResource(R.string.garmin_api_key_cancel)) }
                                     }
                                 }
-                            }
 
-                            // Persistent, colour-coded result — stays on screen so it can be read.
-                            testResult?.let { result ->
-                                Spacer(Modifier.size(12.dp))
-                                TestResultPanel(result)
-                            }
+                                Spacer(Modifier.size(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    FilledTonalButton(
+                                        onClick = { scope.launch { testGarmin(region) } },
+                                        enabled = !testing,
+                                    ) {
+                                        Icon(Icons.Rounded.NetworkCheck, null, Modifier.size(18.dp))
+                                        Spacer(Modifier.size(6.dp))
+                                        Text(stringResource(if (testing) R.string.garmin_api_testing else R.string.garmin_api_test))
+                                    }
+                                    TextButton(onClick = {
+                                        scope.launch {
+                                            app.garminMetrics.refresh(region)
+                                            WidgetUpdateScheduler.refreshNow(context)
+                                        }
+                                    }) { Text(stringResource(R.string.garmin_api_sync_now)) }
+                                    if (saved) {
+                                        TextButton(onClick = { scope.launch { clearKey(region) } }) {
+                                            Text(stringResource(R.string.garmin_api_key_clear))
+                                        }
+                                    }
+                                }
 
-                            val synced = sourceState?.lastSyncMillis ?: 0L
-                            val status = when {
-                                synced > 0L -> stringResource(
-                                    R.string.garmin_api_last_sync,
-                                    DateTimeFormatter.ofPattern("MMM d HH:mm", currentLocale)
-                                        .format(LocalDateTime.ofInstant(Instant.ofEpochMilli(synced), ZoneId.systemDefault())),
+                                testResult?.let { result ->
+                                    if (result.region == region || result.region == null) {
+                                        Spacer(Modifier.size(10.dp))
+                                        TestResultPanel(result)
+                                    }
+                                }
+
+                                val synced = sourceState?.lastSyncMillis ?: 0L
+                                val status = when {
+                                    synced > 0L -> stringResource(
+                                        R.string.garmin_api_last_sync,
+                                        DateTimeFormatter.ofPattern("MMM d HH:mm", currentLocale)
+                                            .format(LocalDateTime.ofInstant(Instant.ofEpochMilli(synced), ZoneId.systemDefault())),
+                                    )
+                                    !saved -> stringResource(R.string.garmin_api_no_key)
+                                    else -> stringResource(R.string.garmin_api_status_idle)
+                                }
+                                Spacer(Modifier.size(8.dp))
+                                Text(
+                                    status,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                !hasSavedKey -> stringResource(R.string.garmin_api_no_key)
-                                else -> stringResource(R.string.garmin_api_status_idle)
                             }
-                            Spacer(Modifier.size(10.dp))
-                            Text(
-                                status,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            SettingsDivider()
                         }
                     }
                 }
@@ -644,6 +692,15 @@ fun SettingsScreen(
                         title = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
                         subtitle = stringResource(R.string.settings_version_summary),
                         onClick = {},
+                    )
+                    SettingRow(
+                        icon = Icons.Rounded.CloudSync,
+                        title = stringResource(
+                            if (updateChecking) R.string.update_checking else R.string.settings_check_updates,
+                        ),
+                        subtitle = updateStatus
+                            ?: stringResource(R.string.settings_check_updates_summary),
+                        onClick = { checkForUpdates() },
                     )
                     SettingRow(
                         icon = Icons.AutoMirrored.Rounded.OpenInNew,
@@ -861,46 +918,28 @@ fun SettingsScreen(
             },
         )
     }
-
-    if (showSourceDialog) {
-        val currentSource = sourceState?.source ?: MetricSource.HEALTH_CONNECT
+    updateReady?.let { (apk, mirror) ->
         AlertDialog(
-            onDismissRequest = { showSourceDialog = false },
-            title = { Text(stringResource(R.string.settings_data_source)) },
-            text = {
-                Column(Modifier.selectableGroup()) {
-                    MetricSource.entries.forEach { option ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(MaterialTheme.shapes.medium)
-                                .selectable(
-                                    selected = option == currentSource,
-                                    role = Role.RadioButton,
-                                    onClick = {
-                                        showSourceDialog = false
-                                        scope.launch { applySourceChange(option) }
-                                    },
-                                )
-                                .padding(vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RadioButton(selected = option == currentSource, onClick = null)
-                            Spacer(Modifier.size(12.dp))
-                            Column {
-                                Text(stringResource(option.labelRes), style = MaterialTheme.typography.bodyLarge)
-                                Text(
-                                    stringResource(option.descriptionRes),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                }
-            },
+            onDismissRequest = { updateReady = null },
+            title = { Text(stringResource(R.string.update_found_title)) },
+            text = { Text(stringResource(R.string.update_ready_body, mirror)) },
             confirmButton = {
-                TextButton(onClick = { showSourceDialog = false }) { Text(stringResource(R.string.action_cancel)) }
+                TextButton(onClick = {
+                    updateReady = null
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        context, "${context.packageName}.fileprovider", apk,
+                    )
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW)
+                                .setDataAndType(uri, "application/vnd.android.package-archive")
+                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                }) { Text(stringResource(R.string.update_install)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { updateReady = null }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -929,12 +968,10 @@ private fun SectionLabel(
     }
 }
 
-/** Colour token shared by the settings badge and the dashboard source labels. */
-@Composable
-private fun sourceColor(source: MetricSource): androidx.compose.ui.graphics.Color = when (source) {
-    MetricSource.HEALTH_CONNECT -> androidx.compose.ui.graphics.Color(0xFF2BB79C)
-    MetricSource.AUTO -> MaterialTheme.colorScheme.primary
-    MetricSource.GARMIN_API -> androidx.compose.ui.graphics.Color(0xFF1B8FD6)
+/** Colour token for a data-source row. */
+private fun sourceColorFor(id: String): androidx.compose.ui.graphics.Color = when (id) {
+    SOURCE_ID_HC -> androidx.compose.ui.graphics.Color(0xFF2BB79C)
+    else -> androidx.compose.ui.graphics.Color(0xFF1B8FD6)
 }
 
 @Composable
@@ -952,6 +989,38 @@ private fun SourcePill(label: String, color: androidx.compose.ui.graphics.Color)
             Spacer(Modifier.size(8.dp))
             Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
         }
+    }
+}
+
+/** One data-source row: icon + name + priority arrows + enable switch. */
+@Composable
+private fun SourceRow(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean,
+    isFirst: Boolean,
+    onToggle: (Boolean) -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.size(12.dp))
+        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        if (enabled) {
+            TextButton(onClick = onMoveUp, enabled = !isFirst, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text("↑")
+            }
+            TextButton(onClick = onMoveDown, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text("↓")
+            }
+        }
+        Switch(checked = enabled, onCheckedChange = onToggle)
     }
 }
 

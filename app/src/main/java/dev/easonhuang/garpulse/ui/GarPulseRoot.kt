@@ -44,7 +44,6 @@ import dev.easonhuang.garpulse.data.ExportManager
 import dev.easonhuang.garpulse.data.HealthConnectManager
 import dev.easonhuang.garpulse.data.LanguagePreferences
 import dev.easonhuang.garpulse.data.Metric
-import dev.easonhuang.garpulse.data.MetricSource
 import dev.easonhuang.garpulse.ui.dashboard.DashboardScreen
 import dev.easonhuang.garpulse.ui.detail.DetailScreen
 import dev.easonhuang.garpulse.ui.onboarding.LoadingScreen
@@ -77,9 +76,7 @@ fun GarPulseRoot(
     val sourceState by app.metricSource.state.collectAsStateWithLifecycle(initialValue = null)
     // With a configured Garmin key the app is usable without Health Connect installed — in both
     // Garmin-only and mirrored (both sources) modes.
-    val garminReady = sourceState?.hasKey == true &&
-        (sourceState?.source == MetricSource.GARMIN_API || sourceState?.source == MetricSource.AUTO)
-    val garminMode = garminReady
+    val garminMode = sourceState?.anyGarmin == true
 
     // Garmin-only users can dismiss the Health Connect gate and enter the app without it;
     // they configure their API key under 设置 → 数据来源.
