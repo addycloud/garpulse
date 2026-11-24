@@ -1,6 +1,7 @@
 package dev.easonhuang.garpulse.widget
 
 import android.content.Context
+import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -20,6 +21,7 @@ import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.state.getAppWidgetState
@@ -44,6 +46,7 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import dev.easonhuang.garpulse.GarPulseApp
+import dev.easonhuang.garpulse.MainActivity
 import dev.easonhuang.garpulse.R
 import dev.easonhuang.garpulse.data.Metric
 import dev.easonhuang.garpulse.data.MetricKind
@@ -213,7 +216,12 @@ internal fun ConfigurableWidgetContent() {
     val imageBitmap = WidgetImageStore
         .load(config.imagePath, maxDimension = (size.width.value * density).toInt().coerceAtLeast(360))
         .let { loaded -> loaded?.let { WidgetImageStore.withAlpha(it, config.imageAlpha) } }
-    val globalTap = widgetTapActionOrNull(config.tapFor(config.metrics.firstOrNull()?.key.orEmpty()), null)
+    // When there is no data yet (fresh placement, missing permissions), the widget as a whole
+    // opens the app instead of being a dead surface — "Tap to connect" must be tappable.
+    val globalTap = if (states.isEmpty())
+        actionStartActivity(Intent(context, MainActivity::class.java))
+    else
+        widgetTapActionOrNull(config.tapFor(config.metrics.firstOrNull()?.key.orEmpty()), null)
 
     // Unified layering: the picture is ALWAYS a full-bleed background. With no metrics it is the
     // whole widget (a photo tile); with metrics their cards float on top. This is one model, so a

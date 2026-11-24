@@ -265,6 +265,8 @@
     <string name="widget_manager_pin_hint">桌面会询问放置位置，随后打开小组件设置。</string>
     <string name="widget_manager_pin_unsupported">当前桌面不支持直接添加，请在桌面的小组件选择器中添加 GarPulse。</string>
     <string name="widget_manager_pin_fallback">直接固定失败。你编辑的配置已保存——10 分钟内从桌面的小组件列表添加 GarPulse 小组件，会自动套用这份配置。</string>
+    <string name="widget_pin_requested">已发起添加，请在桌面确认放置小组件，添加后会立即获取数据。</string>
+    <string name="widget_pin_added">小组件已添加到桌面</string>
     <string name="widget_manager_placed">已添加的小组件：%1$d 个</string>
     <string name="widget_manager_empty">还没有添加小组件。可在上方添加，或长按桌面。</string>
 

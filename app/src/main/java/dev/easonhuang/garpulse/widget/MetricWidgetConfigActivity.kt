@@ -195,6 +195,7 @@ class MetricWidgetConfigActivity : ComponentActivity() {
         )
         val accepted = WidgetCatalog.pinUniversal(this, callback)
         if (accepted) {
+            Toast.makeText(this, getString(R.string.widget_pin_requested), Toast.LENGTH_LONG).show()
             finish()
             return
         }

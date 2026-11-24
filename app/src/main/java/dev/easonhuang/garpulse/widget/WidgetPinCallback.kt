@@ -7,6 +7,7 @@ import android.content.Intent
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.state.PreferencesGlanceStateDefinition
+import dev.easonhuang.garpulse.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -44,6 +45,9 @@ class WidgetPinCallback : BroadcastReceiver() {
                 }
                 ConfigurableWidget.refreshData(app, glanceId, WidgetConfig.DEFAULT)
                 UniversalWidget().update(app, glanceId)
+                android.widget.Toast.makeText(
+                    app, app.getString(R.string.widget_pin_added), android.widget.Toast.LENGTH_SHORT,
+                ).show()
             } catch (t: Throwable) {
                 // Never crash; the render-time fallback in UniversalWidget will re-apply the
                 // draft if the state write did not land.

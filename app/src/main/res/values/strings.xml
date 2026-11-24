@@ -277,6 +277,8 @@
     <string name="widget_manager_pin_hint">Your launcher will ask where to place the widget, then open its settings.</string>
     <string name="widget_manager_pin_unsupported">This launcher does not support direct pinning. Add GarPulse from the widget picker instead.</string>
     <string name="widget_manager_pin_fallback">Direct pinning failed. Your edited config is saved — add the widget from your desktop\'s widget picker within 10 minutes and it will use this config.</string>
+    <string name="widget_pin_requested">Add request sent — confirm placement on your home screen. It will fill with data right away.</string>
+    <string name="widget_pin_added">Widget added to your home screen</string>
     <string name="widget_manager_placed">Placed widgets: %1$d</string>
     <string name="widget_manager_empty">No widgets placed yet. Add one above, or long-press your home screen.</string>
 

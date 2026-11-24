@@ -17,7 +17,11 @@ class UniversalWidget : ConfigurableWidget() {
     override fun defaultConfig(context: Context): WidgetConfig = WidgetConfig.DEFAULT
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        applyPendingDraft(context, id)
+        // If a staged draft was applied by this render-time fallback, also fetch the first real
+        // data snapshot right here — otherwise the widget sits on "Tap to connect" until the
+        // user opens the app.
+        val appliedDraft = applyPendingDraft(context, id)
+        if (appliedDraft) runCatching { ConfigurableWidget.refreshData(context, id, WidgetConfig.DEFAULT) }
         super.provideGlance(context, id)
     }
 
@@ -27,19 +31,20 @@ class UniversalWidget : ConfigurableWidget() {
      * renders while a *fresh* draft is staged and this instance is still unconfigured (no
      * METRICS key in its state — true only for a brand-new placement), the draft belongs to it.
      */
-    private suspend fun applyPendingDraft(context: Context, id: GlanceId) {
-        val (config, stagedAt) = WidgetDraftStore.peek(context) ?: return
-        if (!WidgetDraftStore.isFresh(stagedAt)) return
+    private suspend fun applyPendingDraft(context: Context, id: GlanceId): Boolean {
+        val (config, stagedAt) = WidgetDraftStore.peek(context) ?: return false
+        if (!WidgetDraftStore.isFresh(stagedAt)) return false
         val configured = runCatching {
             getAppWidgetState(context, PreferencesGlanceStateDefinition, id)[WidgetPrefs.METRICS] != null
         }.getOrDefault(false)
-        if (configured) return
+        if (configured) return false
         val draftConfig = WidgetDraftStore.consume(context) ?: config
         updateAppWidgetState(context, PreferencesGlanceStateDefinition, id) { prefs ->
             val mutable = prefs.toMutablePreferences()
             WidgetConfigCodec.write(mutable, draftConfig)
             mutable
         }
+        return true
     }
 
     companion object {
