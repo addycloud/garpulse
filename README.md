@@ -26,9 +26,13 @@ A private, **read-only** health metrics widget app for Android. GarPulse reads y
 
 ## Download
 
-Grab the latest APK from [Releases](https://github.com/addycloud/garpulse/releases/latest). Debug builds from every commit are available as [Actions artifacts](https://github.com/addycloud/garpulse/actions) (`garpulse-debug-apk`, requires a GitHub login).
+**GitHub Releases** — <https://github.com/addycloud/garpulse/releases/latest>
+Direct APK: `https://github.com/addycloud/garpulse/releases/download/v1.2.6/garpulse-v1.2.6.apk`
 
-The same repository is mirrored on Gitee: <https://gitee.com/addycloud/GarPulse>
+**Gitee Releases (mirror)** — <https://gitee.com/addycloud/GarPulse/releases/latest>
+Direct APK: `https://gitee.com/addycloud/GarPulse/releases/download/v1.2.6/garpulse-v1.2.6.apk`
+
+Debug builds from every commit are available as [GitHub Actions artifacts](https://github.com/addycloud/garpulse/actions) (`garpulse-debug-apk`, requires a GitHub login). Source code is mirrored on Gitee: <https://gitee.com/addycloud/GarPulse>
 
 ## Data sources
 
@@ -91,9 +95,13 @@ Release builds need signing configuration (`keystore.properties` or CI secrets);
 
 ## 下载
 
-从 [Releases](https://github.com/addycloud/garpulse/releases/latest) 获取最新 APK。每次提交的 debug 包可在 [Actions](https://github.com/addycloud/garpulse/actions) 的 Artifacts 中下载（`garpulse-debug-apk`，需登录 GitHub）。
+**Gitee 版本发布** —— <https://gitee.com/addycloud/GarPulse/releases/latest>
+APK 直链：`https://gitee.com/addycloud/GarPulse/releases/download/v1.2.6/garpulse-v1.2.6.apk`
 
-本仓库在 Gitee 有镜像：<https://gitee.com/addycloud/GarPulse>
+**GitHub 版本发布（镜像）** —— <https://github.com/addycloud/garpulse/releases/latest>
+APK 直链：`https://github.com/addycloud/garpulse/releases/download/v1.2.6/garpulse-v1.2.6.apk`
+
+每次提交的 debug 包可在 [GitHub Actions](https://github.com/addycloud/garpulse/actions) 的 Artifacts 中下载（`garpulse-debug-apk`，需登录 GitHub）。源码仓库地址：<https://gitee.com/addycloud/GarPulse>
 
 ## 数据来源
 
