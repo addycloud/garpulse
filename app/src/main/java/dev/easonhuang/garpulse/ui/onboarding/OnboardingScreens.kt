@@ -39,7 +39,7 @@ fun LoadingScreen() {
 }
 
 @Composable
-fun OnboardingScreen(onConnect: () -> Unit) {
+fun OnboardingScreen(onConnect: () -> Unit, showSkip: Boolean = false, onSkip: () -> Unit = {}) {
     val accent = MaterialTheme.colorScheme.primary
     Column(
         Modifier.fillMaxSize().padding(32.dp),
@@ -67,11 +67,17 @@ fun OnboardingScreen(onConnect: () -> Unit) {
         Button(onClick = onConnect, modifier = Modifier.fillMaxWidth().height(52.dp)) {
             Text(stringResource(R.string.onboarding_connect), style = MaterialTheme.typography.titleMedium)
         }
+        if (showSkip) {
+            Spacer(Modifier.height(4.dp))
+            TextButton(onClick = onSkip) {
+                Text(stringResource(R.string.onboarding_skip_to_garmin))
+            }
+        }
     }
 }
 
 @Composable
-fun UnavailableScreen(onInstall: () -> Unit) {
+fun UnavailableScreen(onInstall: () -> Unit, onSkip: () -> Unit = {}) {
     Column(
         Modifier.fillMaxSize().padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -92,6 +98,10 @@ fun UnavailableScreen(onInstall: () -> Unit) {
         Spacer(Modifier.height(28.dp))
         Button(onClick = onInstall, modifier = Modifier.fillMaxWidth().height(52.dp)) {
             Text(stringResource(R.string.onboarding_get_hc))
+        }
+        Spacer(Modifier.height(4.dp))
+        TextButton(onClick = onSkip) {
+            Text(stringResource(R.string.onboarding_skip_to_garmin))
         }
     }
 }

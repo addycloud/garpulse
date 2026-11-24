@@ -81,17 +81,10 @@ fun GarPulseRoot(
         (sourceState?.source == MetricSource.GARMIN_API || sourceState?.source == MetricSource.AUTO)
     val garminMode = garminReady
 
-    if (!manager.isAvailable && !garminMode) {
-        UnavailableScreen(onInstall = {
-            runCatching {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$HEALTH_CONNECT_PACKAGE"))
-                        .setPackage("com.android.vending")
-                )
-            }
-        })
-        return
-    }
+    // Garmin-only users can dismiss the Health Connect gate and enter the app without it;
+    // they configure their API key under 设置 → 数据来源.
+    var gateDismissed by rememberSaveable { mutableStateOf(false) }
+    var skipOnboarding by rememberSaveable { mutableStateOf(false) }
 
     var granted by remember { mutableStateOf<Set<String>?>(null) }
     // True while the initial setup is chaining its permission requests (data → background).
@@ -187,8 +180,24 @@ fun GarPulseRoot(
     }
     when {
         garminMode -> main()
+        !manager.isAvailable && !gateDismissed -> UnavailableScreen(
+            onInstall = {
+                runCatching {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$HEALTH_CONNECT_PACKAGE"))
+                            .setPackage("com.android.vending")
+                    )
+                }
+            },
+            onSkip = { gateDismissed = true },
+        )
         granted == null || inSetup -> LoadingScreen()
-        !hasData -> OnboardingScreen(onConnect = ::startSetup)
+        !hasData && !skipOnboarding -> OnboardingScreen(
+            onConnect = ::startSetup,
+            // HC missing and the gate was dismissed → let Garmin-only users skip onboarding too.
+            showSkip = !manager.isAvailable && gateDismissed,
+            onSkip = { skipOnboarding = true },
+        )
         else -> main()
     }
 }

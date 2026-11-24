@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material3.Card
@@ -32,6 +34,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.easonhuang.garpulse.R
@@ -107,16 +110,27 @@ fun MetricCard(
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
                 }
                 Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
+                    // Auto-shrinks to fit narrow cards / large system fonts instead of clipping
+                    // digits (e.g. "1,053" → "1,05" on a 3-column phone layout).
+                    BasicText(
                         text = if (locked) stringResource(R.string.card_locked) else summary.value,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        ),
                         maxLines = 1,
+                        autoSize = TextAutoSize.StepBased(
+                            minFontSize = 12.sp,
+                            maxFontSize = 28.sp,
+                            stepSize = 1.sp,
+                        ),
+                        modifier = Modifier.weight(1f, fill = false),
                     )
                     if (!locked && summary.hasData) {
                         Spacer(Modifier.size(4.dp))
@@ -124,6 +138,8 @@ fun MetricCard(
                             text = summary.metric.unit(summary.system),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false,
                             modifier = Modifier.padding(bottom = 4.dp),
                         )
                     }
@@ -137,6 +153,7 @@ fun MetricCard(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 }

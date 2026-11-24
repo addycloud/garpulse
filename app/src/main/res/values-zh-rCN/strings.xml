@@ -66,6 +66,7 @@
     <string name="onboarding_hc_needed_title">需要 Health Connect</string>
     <string name="onboarding_hc_needed_body">GarPulse 通过 Health Connect 读取数据。请安装或更新后继续。</string>
     <string name="onboarding_get_hc">获取 Health Connect</string>
+    <string name="onboarding_skip_to_garmin">跳过，仅使用佳明 API</string>
 
     <!-- 仪表盘 -->
     <string name="dashboard_customize">自定义仪表盘</string>

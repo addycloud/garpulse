@@ -68,6 +68,7 @@
     <string name="onboarding_hc_needed_title">Health Connect needed</string>
     <string name="onboarding_hc_needed_body">GarPulse reads your data through Health Connect. Please install or update it to continue.</string>
     <string name="onboarding_get_hc">Get Health Connect</string>
+    <string name="onboarding_skip_to_garmin">Skip — use Garmin API only</string>
 
     <!-- Dashboard -->
     <string name="dashboard_customize">Customize dashboard</string>
