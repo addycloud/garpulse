@@ -61,6 +61,12 @@ fun MetricCard(
         // Only extremely narrow columns (< ~3.5 per row on a phone) still clip the badge text;
         // there the colour-dot-only form keeps the meaning while never clipping.
         val compact = maxWidth < 110.dp
+        // Icon scales down as the grid gets denser, so 4+ columns still breathe.
+        val iconSize = when {
+            maxWidth >= 150.dp -> 36.dp
+            maxWidth >= 110.dp -> 30.dp
+            else -> 24.dp
+        }
         Card(
             modifier = modifier
                 .height(168.dp)
@@ -87,7 +93,7 @@ fun MetricCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         Modifier
-                            .size(36.dp)
+                            .size(iconSize)
                             .clip(CircleShape)
                             .background(Brush.linearGradient(listOf(accent.copy(alpha = 0.30f), accent.copy(alpha = 0.16f)))),
                         contentAlignment = Alignment.Center,
@@ -96,7 +102,7 @@ fun MetricCard(
                             imageVector = if (locked) Icons.Rounded.Lock else summary.metric.icon,
                             contentDescription = null,
                             tint = accent,
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(iconSize * 0.55f),
                         )
                     }
                     // The source badge sits directly after the icon, before the title.
@@ -105,11 +111,19 @@ fun MetricCard(
                         SourceBadge(summary.source, compact)
                     }
                     Spacer(Modifier.size(8.dp))
-                    Text(
+                    // Shrink the title to fit before falling back to an ellipsis, so narrow
+                    // columns show "步数" small instead of clipping to "步…".
+                    BasicText(
                         text = summary.metric.title,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
                         maxLines = 1,
+                        autoSize = TextAutoSize.StepBased(
+                            minFontSize = 9.sp,
+                            maxFontSize = 14.sp,
+                            stepSize = 1.sp,
+                        ),
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )

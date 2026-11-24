@@ -40,7 +40,7 @@ class DashboardPreferences(private val context: Context) {
     companion object {
         const val MIN_COLUMNS = 1
         const val MAX_COLUMNS = 10
-        const val DEFAULT_COLUMNS = 3
+        const val DEFAULT_COLUMNS = 2
     }
 
     private val orderKey = stringPreferencesKey("card_order")
