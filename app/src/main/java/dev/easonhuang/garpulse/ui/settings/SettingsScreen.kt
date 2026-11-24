@@ -223,7 +223,9 @@ fun SettingsScreen(
     var keyInputs by remember { mutableStateOf(mapOf<GarminRegion, String>()) }
     fun keyInput(region: GarminRegion): String = keyInputs[region].orEmpty()
     var editingRegion by remember { mutableStateOf<GarminRegion?>(null) }
-    var testing by remember { mutableStateOf(false) }
+    // Which region's connection test is in flight — null when idle. Per-region so a test on
+    // one region never shows a loading state on the other's button.
+    var testingRegion by remember { mutableStateOf<GarminRegion?>(null) }
     // Result is kept on screen (not a transient snackbar) so the user can actually read it.
     var testResult by remember { mutableStateOf<TestResult?>(null) }
 
@@ -260,7 +262,7 @@ fun SettingsScreen(
             testResult = TestResult(false, resources.getString(R.string.garmin_api_no_key), region)
             return
         }
-        testing = true
+        testingRegion = region
         val result = runCatching {
             val profile = app.garminApi.testConnection(region)
             val name = profile.optString("displayName", "").ifBlank {
@@ -275,7 +277,7 @@ fun SettingsScreen(
                 region = region,
             )
         }.getOrElse { error -> TestResult(false, resources.getString(R.string.garmin_api_error, error.message.orEmpty()), region) }
-        testing = false
+        testingRegion = null
         keyInputs = keyInputs - region
         editingRegion = null
         testResult = result
@@ -544,11 +546,11 @@ fun SettingsScreen(
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     FilledTonalButton(
                                         onClick = { scope.launch { testGarmin(region) } },
-                                        enabled = !testing,
+                                        enabled = testingRegion == null,
                                     ) {
                                         Icon(Icons.Rounded.NetworkCheck, null, Modifier.size(18.dp))
                                         Spacer(Modifier.size(6.dp))
-                                        Text(stringResource(if (testing) R.string.garmin_api_testing else R.string.garmin_api_test))
+                                        Text(stringResource(if (testingRegion == region) R.string.garmin_api_testing else R.string.garmin_api_test))
                                     }
                                     TextButton(onClick = {
                                         scope.launch {
