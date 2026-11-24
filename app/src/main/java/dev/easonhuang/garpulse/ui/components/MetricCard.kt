@@ -61,12 +61,17 @@ fun MetricCard(
         // Only extremely narrow columns (< ~3.5 per row on a phone) still clip the badge text;
         // there the colour-dot-only form keeps the meaning while never clipping.
         val compact = maxWidth < 110.dp
-        // Icon scales down as the grid gets denser, so 4+ columns still breathe.
+        // Adaptive display tiers by card width:
+        //  - wide (≥150dp, ~1-2 cols): 36dp icon, 14sp title, one line;
+        //  - medium (~110-150dp, ~3 cols): 30dp icon, title shrinks font but stays complete;
+        //  - narrow (<110dp, 4+ cols): 24dp icon, title may wrap to 2 lines, shrink font,
+        //    and only ellipsize when even that cannot fit.
         val iconSize = when {
             maxWidth >= 150.dp -> 36.dp
             maxWidth >= 110.dp -> 30.dp
             else -> 24.dp
         }
+        val titleLines = if (maxWidth < 110.dp) 2 else 1
         Card(
             modifier = modifier
                 .height(168.dp)
@@ -111,16 +116,16 @@ fun MetricCard(
                         SourceBadge(summary.source, compact)
                     }
                     Spacer(Modifier.size(8.dp))
-                    // Shrink the title to fit before falling back to an ellipsis, so narrow
-                    // columns show "步数" small instead of clipping to "步…".
+                    // Prefer shrinking the font (then wrapping on 4+ narrow columns) over
+                    // clipping, so "步数" stays complete at any column count.
                     BasicText(
                         text = summary.metric.title,
                         style = MaterialTheme.typography.labelLarge.copy(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         ),
-                        maxLines = 1,
+                        maxLines = titleLines,
                         autoSize = TextAutoSize.StepBased(
-                            minFontSize = 9.sp,
+                            minFontSize = 8.sp,
                             maxFontSize = 14.sp,
                             stepSize = 1.sp,
                         ),
@@ -140,7 +145,7 @@ fun MetricCard(
                         ),
                         maxLines = 1,
                         autoSize = TextAutoSize.StepBased(
-                            minFontSize = 12.sp,
+                            minFontSize = 10.sp,
                             maxFontSize = 28.sp,
                             stepSize = 1.sp,
                         ),

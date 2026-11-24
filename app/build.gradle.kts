@@ -26,8 +26,8 @@ android {
         applicationId = "dev.easonhuang.garpulse"
         minSdk = 28
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.2.3"
+        versionCode = 7
+        versionName = "1.2.4"
         vectorDrawables { useSupportLibrary = true }
     }
 
