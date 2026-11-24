@@ -295,11 +295,12 @@ fun SettingsScreen(
                     updateStatus = resources.getString(R.string.update_no_network)
                     return@launch
                 }
-                var latest = AppUpdateChecker.fetchLatest(fastest)
+                val debugChannel = BuildConfig.BUILD_TYPE == "debug"
+                var latest = AppUpdateChecker.fetchLatest(fastest, debugChannel)
                 val via = fastest
                 if (latest == null) {
                     val other = if (via == "github") "gitee" else "github"
-                    latest = AppUpdateChecker.fetchLatest(other)
+                    latest = AppUpdateChecker.fetchLatest(other, debugChannel)
                 }
                 if (latest == null) {
                     updateStatus = resources.getString(R.string.update_no_network)

@@ -30,8 +30,14 @@ object AppUpdateChecker {
     }
 
     private const val GITHUB_API = "https://api.github.com/repos/addycloud/garpulse/releases/latest"
+    private const val GITHUB_LIST = "https://api.github.com/repos/addycloud/garpulse/releases?per_page=15"
     private const val GITEE_API = "https://gitee.com/api/v5/repos/addycloud/GarPulse/releases/latest"
+    private const val GITEE_LIST = "https://gitee.com/api/v5/repos/addycloud/GarPulse/releases?per_page=15"
 
+    /**
+     * Debug builds track the dev channel: the newest prerelease whose tag ends with "-dev".
+     * Release builds track the stable channel: the newest non-prerelease.
+     */
     suspend fun probe(): Probes = withContext(Dispatchers.IO) {
         Probes(measure(GITHUB_API), measure(GITEE_API))
     }
@@ -48,24 +54,37 @@ object AppUpdateChecker {
         -1L
     }
 
-    suspend fun fetchLatest(mirror: String): Latest? = withContext(Dispatchers.IO) {
+    suspend fun fetchLatest(mirror: String, debugChannel: Boolean = false): Latest? = withContext(Dispatchers.IO) {
         try {
             when (mirror) {
                 "github" -> {
-                    val body = httpGet(GITHUB_API, headers = mapOf("Accept" to "application/json", "User-Agent" to "garpulse"))
-                    val json = JSONObject(body)
+                    val body = if (debugChannel)
+                        httpGet(GITHUB_LIST, headers = mapOf("Accept" to "application/json", "User-Agent" to "garpulse"))
+                    else
+                        httpGet(GITHUB_API, headers = mapOf("Accept" to "application/json", "User-Agent" to "garpulse"))
+                    val json = if (debugChannel) {
+                        // List is newest-first; the dev channel is the newest prerelease tagged *-dev.
+                        val arr = JSONObject("{\"items\":${body}}").optJSONArray("items") ?: return@withContext null
+                        (0 until arr.length()).map { arr.getJSONObject(it) }
+                            .firstOrNull { it.optBoolean("prerelease", false) && it.optString("tag_name").endsWith("-dev") }
+                            ?: return@withContext null
+                    } else JSONObject(body)
                     val asset = json.optJSONArray("assets")?.let { arr ->
                         (0 until arr.length()).map { arr.getJSONObject(it) }
                             .firstOrNull { it.optString("name").endsWith(".apk") }
                     }
                     Latest(
-                        versionName = json.optString("tag_name").removePrefix("v"),
+                        versionName = json.optString("tag_name").removePrefix("v").removeSuffix("-dev"),
                         apkUrl = asset?.optString("browser_download_url") ?: "",
                         mirror = mirror,
                         notes = json.optString("body"),
                     )
                 }
                 else -> {
+                    if (debugChannel) {
+                        // Dev releases are only published on GitHub; Gitee mirrors stable ones.
+                        return@withContext null
+                    }
                     val body = httpGet(GITEE_API, headers = mapOf("User-Agent" to "garpulse"))
                     val json = JSONObject(body)
                     val asset = json.optJSONArray("assets")?.let { arr ->
@@ -74,7 +93,7 @@ object AppUpdateChecker {
                             ?.let { it.optString("browser_download_url") }
                     }
                     Latest(
-                        versionName = json.optString("tag_name").removePrefix("v"),
+                        versionName = json.optString("tag_name").removePrefix("v").removeSuffix("-dev"),
                         apkUrl = asset ?: "",
                         mirror = mirror,
                         notes = json.optString("body"),
