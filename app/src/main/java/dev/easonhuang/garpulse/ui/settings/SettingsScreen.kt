@@ -50,6 +50,7 @@ import androidx.compose.material.icons.rounded.NetworkCheck
 import androidx.compose.material.icons.rounded.Straighten
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.ViewWeek
+import androidx.compose.animation.animateContentSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -456,25 +457,29 @@ fun SettingsScreen(
                     }
                     SettingsDivider()
 
-                    // One row per source: enable switch + priority arrows. Garmin rows expand
-                    // to their key management area when enabled.
-                    val rows = listOf(
-                        Triple(SOURCE_ID_HC, R.string.source_health_connect, Icons.Rounded.MonitorHeart),
-                        Triple(GarminRegion.GLOBAL.id, R.string.source_garmin_global, Icons.Rounded.CloudSync),
-                        Triple(GarminRegion.CN.id, R.string.source_garmin_cn, Icons.Rounded.CloudSync),
+                    // One row per source: enable switch + priority arrows. Rows render in the
+                    // actual priority order so moving up/down visibly swaps them on screen.
+                    val rowsByLabel = mapOf(
+                        SOURCE_ID_HC to Triple(SOURCE_ID_HC, R.string.source_health_connect, Icons.Rounded.MonitorHeart),
+                        GarminRegion.GLOBAL.id to Triple(GarminRegion.GLOBAL.id, R.string.source_garmin_global, Icons.Rounded.CloudSync),
+                        GarminRegion.CN.id to Triple(GarminRegion.CN.id, R.string.source_garmin_cn, Icons.Rounded.CloudSync),
                     )
-                    rows.forEach { (id, labelRes, icon) ->
+                    val orderedIds = (current?.order ?: listOf(
+                        GarminRegion.GLOBAL.id, GarminRegion.CN.id, SOURCE_ID_HC,
+                    )).filter { it in rowsByLabel }
+                    orderedIds.forEach { id ->
+                        val (_, labelRes, icon) = rowsByLabel.getValue(id)
                         val enabled = when (id) {
                             SOURCE_ID_HC -> current?.hcEnabled ?: true
                             GarminRegion.GLOBAL.id -> current?.globalEnabled ?: false
                             else -> current?.cnEnabled ?: false
                         }
-                        val first = current?.order?.firstOrNull()
                         SourceRow(
                             title = stringResource(labelRes),
                             icon = icon,
                             enabled = enabled,
-                            isFirst = first == id,
+                            isFirst = id == orderedIds.first(),
+                            isLast = id == orderedIds.last(),
                             onToggle = { on ->
                                 scope.launch {
                                     when (id) {
@@ -489,7 +494,7 @@ fun SettingsScreen(
                             onMoveUp = { scope.launch { app.metricSource.moveUp(id); WidgetUpdateScheduler.refreshNow(context) } },
                             onMoveDown = { scope.launch { app.metricSource.moveDown(id); WidgetUpdateScheduler.refreshNow(context) } },
                         )
-                        if (id == SOURCE_ID_HC) SettingsDivider()
+                        if (id != orderedIds.last()) SettingsDivider()
 
                         // Garmin rows: key management per region, shown only when enabled.
                         val region = GarminRegion.fromId(id)
@@ -1089,6 +1094,7 @@ private fun SourceRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     enabled: Boolean,
     isFirst: Boolean,
+    isLast: Boolean,
     onToggle: (Boolean) -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
@@ -1103,12 +1109,16 @@ private fun SourceRow(
         Spacer(Modifier.size(12.dp))
         Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         if (enabled) {
-            TextButton(onClick = onMoveUp, enabled = !isFirst, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                Text("↑")
-            }
-            TextButton(onClick = onMoveDown, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                Text("↓")
-            }
+            TextButton(
+                onClick = onMoveUp,
+                enabled = !isFirst,
+                contentPadding = PaddingValues(horizontal = 8.dp),
+            ) { Text("↑", style = MaterialTheme.typography.titleMedium) }
+            TextButton(
+                onClick = onMoveDown,
+                enabled = !isLast,
+                contentPadding = PaddingValues(horizontal = 8.dp),
+            ) { Text("↓", style = MaterialTheme.typography.titleMedium) }
         }
         Switch(checked = enabled, onCheckedChange = onToggle)
     }
@@ -1196,7 +1206,7 @@ private fun SettingsCard(content: @Composable () -> Unit) {
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
-        Column(Modifier.padding(vertical = 6.dp)) { content() }
+        Column(Modifier.padding(vertical = 6.dp).animateContentSize()) { content() }
     }
 }
 
