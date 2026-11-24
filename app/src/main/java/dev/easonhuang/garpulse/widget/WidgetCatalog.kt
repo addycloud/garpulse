@@ -148,14 +148,11 @@ object WidgetCatalog {
         instance.size?.let { context.getString(it.labelRes) }
             ?: context.getString(R.string.widget_size_unknown)
 
-    /** Convenience used by the in-app editor to describe a configuration in one line. */
+    /** Convenience used by the in-app editor to describe a configuration in one line (metrics only). */
     fun summary(context: Context, instance: WidgetInstance): String {
         val config = instance.config
         val metricNames = config.metrics.joinToString(", ") { it.title(context) }
-        return listOfNotNull(
-            sizeLabel(context, instance),
-            metricNames.takeIf { it.isNotBlank() },
-        ).joinToString(" · ")
+        return metricNames.takeIf { it.isNotBlank() } ?: context.getString(R.string.widget_no_metrics)
     }
 
     /**

@@ -123,6 +123,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import java.time.Instant
+import java.time.LocalTime
 import java.time.LocalDateTime
 import java.io.File
 import java.time.ZoneId
@@ -216,19 +217,20 @@ fun SettingsScreen(
     val sourceState by app.metricSource.state.collectAsStateWithLifecycle(initialValue = null)
     val sparkBehindCollect by dashboardPrefs.sparkBehind.collectAsStateWithLifecycle(initialValue = false)
     val hasSavedKey = sourceState?.hasKey == true
-    // The key is never pre-filled into a visible field. Editing starts from blank; leaving the
-    // field blank on save means "keep the current key", so its value is never echoed in the UI.
-    var keyInput by remember { mutableStateOf("") }
+    // Per-region key inputs: editing one region's key must never echo into the other's field,
+    // and a test on one region must not persist the other's draft.
+    var keyInputs by remember { mutableStateOf(mapOf<GarminRegion, String>()) }
+    fun keyInput(region: GarminRegion): String = keyInputs[region].orEmpty()
     var editingRegion by remember { mutableStateOf<GarminRegion?>(null) }
     var testing by remember { mutableStateOf(false) }
     // Result is kept on screen (not a transient snackbar) so the user can actually read it.
     var testResult by remember { mutableStateOf<TestResult?>(null) }
-    LaunchedEffect(sourceState?.globalKey, sourceState?.cnKey) { keyInput = "" }
 
     suspend fun saveKey(region: GarminRegion) {
-        if (keyInput.isBlank()) return
-        app.metricSource.setApiKey(region, keyInput)
-        keyInput = ""
+        val input = keyInput(region)
+        if (input.isBlank()) return
+        app.metricSource.setApiKey(region, input)
+        keyInputs = keyInputs - region
         editingRegion = null
         testResult = null
         app.garminMetrics.invalidate()
@@ -238,7 +240,7 @@ fun SettingsScreen(
 
     suspend fun clearKey(region: GarminRegion) {
         app.metricSource.setApiKey(region, "")
-        keyInput = ""
+        keyInputs = keyInputs - region
         editingRegion = null
         testResult = null
         app.garminMetrics.invalidate()
@@ -248,8 +250,9 @@ fun SettingsScreen(
 
     suspend fun testGarmin(region: GarminRegion) {
         // Test always uses the stored key. If the user typed a new one, persist it first.
-        if (keyInput.isNotBlank()) {
-            app.metricSource.setApiKey(region, keyInput)
+        val input = keyInput(region)
+        if (input.isNotBlank()) {
+            app.metricSource.setApiKey(region, input)
             app.garminMetrics.invalidate()
         }
         if (app.metricSource.snapshot().apiKey(region).isBlank()) {
@@ -272,7 +275,7 @@ fun SettingsScreen(
             )
         }.getOrElse { error -> TestResult(false, resources.getString(R.string.garmin_api_error, error.message.orEmpty()), region) }
         testing = false
-        keyInput = ""
+        keyInputs = keyInputs - region
         editingRegion = null
         testResult = result
     }
@@ -384,8 +387,8 @@ fun SettingsScreen(
             item {
                 SectionLabel(
                     stringResource(R.string.settings_widget_updates),
-                    R.string.help_settings_data_title,
-                    R.array.help_settings_data,
+                    R.string.help_widget_updates_title,
+                    R.array.help_widget_updates,
                 )
             }
             item {
@@ -507,8 +510,8 @@ fun SettingsScreen(
                                     KeyStatusRow(onChange = { editingRegion = region })
                                 } else {
                                     OutlinedTextField(
-                                        value = keyInput,
-                                        onValueChange = { keyInput = it },
+                                        value = keyInput(region),
+                                        onValueChange = { keyInputs = keyInputs + (region to it) },
                                         label = { Text(stringResource(R.string.garmin_api_key_label)) },
                                         placeholder = { Text(stringResource(R.string.garmin_api_key_placeholder)) },
                                         singleLine = true,
@@ -523,10 +526,10 @@ fun SettingsScreen(
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Button(
                                             onClick = { scope.launch { saveKey(region) } },
-                                            enabled = keyInput.isNotBlank(),
+                                            enabled = keyInput(region).isNotBlank(),
                                         ) { Text(stringResource(R.string.garmin_api_key_save)) }
                                         TextButton(onClick = {
-                                            keyInput = ""
+                                            keyInputs = keyInputs - region
                                             editingRegion = null
                                         }) { Text(stringResource(R.string.garmin_api_key_cancel)) }
                                     }
@@ -556,7 +559,7 @@ fun SettingsScreen(
                                 }
 
                                 testResult?.let { result ->
-                                    if (result.region == region || result.region == null) {
+                                    if (result.region == region) {
                                         Spacer(Modifier.size(10.dp))
                                         TestResultPanel(result)
                                     }
@@ -754,6 +757,93 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showColumnsDialog = false }) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
+    }
+
+    if (showIntervalDialog) {
+        val options = listOf(15, 30, 60, 120, 240)
+        val currentInterval = WidgetUpdateScheduler.intervalMinutes(context)
+        AlertDialog(
+            onDismissRequest = { showIntervalDialog = false },
+            title = { Text(stringResource(R.string.settings_widget_interval)) },
+            text = {
+                Column(Modifier.selectableGroup()) {
+                    Text(
+                        stringResource(R.string.settings_widget_interval_summary, currentInterval),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    options.forEach { minutes ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(MaterialTheme.shapes.medium)
+                                .selectable(
+                                    selected = currentInterval == minutes,
+                                    role = Role.RadioButton,
+                                    onClick = {
+                                        showIntervalDialog = false
+                                        WidgetUpdateScheduler.setSchedule(context, minutes, WidgetUpdateScheduler.fixedTimes(context))
+                                        WidgetUpdateScheduler.refreshNow(context)
+                                    },
+                                )
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = currentInterval == minutes, onClick = null)
+                            Spacer(Modifier.size(8.dp))
+                            Text(
+                                if (minutes >= 60) "${minutes / 60} h" + (if (minutes % 60 != 0) " ${minutes % 60} min" else "")
+                                else "$minutes min",
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showIntervalDialog = false }) { Text(stringResource(R.string.action_done)) }
+            },
+        )
+    }
+
+    if (showTimesDialog) {
+        AlertDialog(
+            onDismissRequest = { showTimesDialog = false },
+            title = { Text(stringResource(R.string.settings_widget_fixed)) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = timesInput,
+                        onValueChange = { timesInput = it },
+                        label = { Text(stringResource(R.string.settings_widget_fixed)) },
+                        placeholder = { Text("08:00, 22:00") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        stringResource(R.string.settings_widget_fixed_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showTimesDialog = false
+                    val parsed = timesInput.split(',')
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .mapNotNull { runCatching { LocalTime.parse(it) }.getOrNull() }
+                    WidgetUpdateScheduler.setSchedule(context, WidgetUpdateScheduler.intervalMinutes(context), parsed)
+                    WidgetUpdateScheduler.refreshNow(context)
+                }) { Text(stringResource(R.string.action_done)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimesDialog = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }

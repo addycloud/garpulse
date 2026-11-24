@@ -437,6 +437,8 @@
     <string name="help_settings_title">设置</string>
     <string name="help_settings_data_title">数据</string>
     <string name="help_settings_source_title">数据来源</string>
+    <string name="help_widget_updates_title">小组件更新</string>
+    <string name="widget_no_metrics">未选择指标</string>
     <string name="help_settings_display_title">显示</string>
     <string name="help_settings_export_title">导出</string>
     <string name="help_settings_about_title">关于</string>
@@ -511,6 +513,11 @@
         <item>佳明 API：需填写个人 API 密钥；双来源时由优先级决定采用谁的数据。</item>
         <item>卡片上的来源标记会显示数值是否来自佳明。</item>
         <item>密钥不会再次显示；留空保存表示保留原密钥。</item>
+    </string-array>
+    <string-array name="help_widget_updates">
+        <item>刷新间隔：设置小组件后台重新读取数据的频率（系统休眠时可能延迟）。</item>
+        <item>每天定点更新：在每天的固定时间刷新一次，例如起床后；留空表示关闭。</item>
+        <item>两者可以同时使用；打开应用时小组件仍会立即刷新。</item>
     </string-array>
     <string-array name="help_settings_display">
         <item>概览列数可设置 1 到 10 列。</item>

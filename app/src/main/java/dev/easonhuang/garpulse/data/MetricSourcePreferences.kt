@@ -39,8 +39,8 @@ data class MetricSourceState(
     val cnEnabled: Boolean = false,
     val globalKey: String = "",
     val cnKey: String = "",
-    /** Priority order of source ids, e.g. "hc,garmin_global,garmin_cn". */
-    val order: List<String> = listOf(SOURCE_ID_HC, GarminRegion.GLOBAL.id, GarminRegion.CN.id),
+    /** Priority order of source ids, e.g. "garmin_global,garmin_cn,hc". Health Connect is lowest by default. */
+    val order: List<String> = listOf(GarminRegion.GLOBAL.id, GarminRegion.CN.id, SOURCE_ID_HC),
     val tokenGlobal: String = "",
     val tokenCn: String = "",
     val tokenGlobalExpiresAt: Long = 0L,
@@ -135,10 +135,12 @@ class MetricSourcePreferences(private val context: Context) {
                 cnEnabled = prefs[cnEnabledKey] ?: false,
                 globalKey = prefs[globalKeyKey].orEmpty(),
                 cnKey = prefs[cnKeyKey].orEmpty(),
-                order = prefs[orderKey]?.split(',')
-                    ?.map { it.trim() }?.filter { it.isNotBlank() }
-                    ?.takeIf { it.isNotEmpty() }
-                    ?: listOf(SOURCE_ID_HC, GarminRegion.GLOBAL.id, GarminRegion.CN.id),
+                order = normalizeOrder(
+                    prefs[orderKey]?.split(',')
+                        ?.map { it.trim() }?.filter { it.isNotBlank() }
+                        ?.takeIf { it.isNotEmpty() }
+                        ?: listOf(GarminRegion.GLOBAL.id, GarminRegion.CN.id, SOURCE_ID_HC),
+                ),
                 tokenGlobal = prefs[tokenGlobalKey].orEmpty(),
                 tokenCn = prefs[tokenCnKey].orEmpty(),
                 tokenGlobalExpiresAt = prefs[tokenGlobalExpiryKey] ?: 0L,
@@ -149,8 +151,22 @@ class MetricSourcePreferences(private val context: Context) {
         }
     }
 
-    private fun writeState(prefs: androidx.datastore.preferences.core.MutablePreferences, s: MetricSourceState) {
-        prefs[hcEnabledKey] = s.hcEnabled
+    /**
+     * Ensures every known source id appears exactly once in the order. Old installs may have
+     * stored a partial order (e.g. only "hc"), which made the priority arrows dead for the
+     * missing ids — they were never in the list, so moving them was a no-op.
+     */
+    private fun normalizeOrder(raw: List<String>): List<String> {
+        val all = raw +
+            listOf(GarminRegion.GLOBAL.id, GarminRegion.CN.id, SOURCE_ID_HC).filter { it !in raw }
+        // Pre-multi-source-default installs stored the old default (HC first). Move HC to the
+        // lowest priority unless the user reordered it themselves.
+        return if (all == listOf(SOURCE_ID_HC, GarminRegion.GLOBAL.id, GarminRegion.CN.id))
+            listOf(GarminRegion.GLOBAL.id, GarminRegion.CN.id, SOURCE_ID_HC)
+        else all
+    }
+
+    private fun writeState(prefs: androidx.datastore.preferences.core.MutablePreferences, s: MetricSourceState) {        prefs[hcEnabledKey] = s.hcEnabled
         prefs[globalEnabledKey] = s.globalEnabled
         prefs[cnEnabledKey] = s.cnEnabled
         prefs[globalKeyKey] = s.globalKey
@@ -188,17 +204,23 @@ class MetricSourcePreferences(private val context: Context) {
 
     /** Moves [id] one position up in the priority order (earlier = higher priority). */
     suspend fun moveUp(id: String) = edit { prefs ->
-        val current = prefs[orderKey]?.split(',')?.filter { it.isNotBlank() }
-            ?: listOf(SOURCE_ID_HC, GarminRegion.GLOBAL.id, GarminRegion.CN.id)
+        val current = normalizeOrder(
+            prefs[orderKey]?.split(',')?.filter { it.isNotBlank() }
+                ?: listOf(GarminRegion.GLOBAL.id, GarminRegion.CN.id, SOURCE_ID_HC),
+        )
         val i = current.indexOf(id)
         if (i > 0) prefs[orderKey] = current.toMutableList().apply { add(i - 1, removeAt(i)) }.joinToString(",")
+        else if (i < 0) prefs[orderKey] = (current + id).joinToString(",")
     }
 
     suspend fun moveDown(id: String) = edit { prefs ->
-        val current = prefs[orderKey]?.split(',')?.filter { it.isNotBlank() }
-            ?: listOf(SOURCE_ID_HC, GarminRegion.GLOBAL.id, GarminRegion.CN.id)
+        val current = normalizeOrder(
+            prefs[orderKey]?.split(',')?.filter { it.isNotBlank() }
+                ?: listOf(GarminRegion.GLOBAL.id, GarminRegion.CN.id, SOURCE_ID_HC),
+        )
         val i = current.indexOf(id)
         if (i in 0 until current.size - 1) prefs[orderKey] = current.toMutableList().apply { add(i + 1, removeAt(i)) }.joinToString(",")
+        else if (i < 0) prefs[orderKey] = (current + id).joinToString(",")
     }
 
     suspend fun saveToken(region: GarminRegion, token: String, expiresAt: Long) = edit {

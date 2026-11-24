@@ -449,6 +449,8 @@
     <string name="help_settings_title">Settings</string>
     <string name="help_settings_data_title">Data</string>
     <string name="help_settings_source_title">Data source</string>
+    <string name="help_widget_updates_title">Widget updates</string>
+    <string name="widget_no_metrics">No metrics selected</string>
     <string name="help_settings_display_title">Display</string>
     <string name="help_settings_export_title">Export</string>
     <string name="help_settings_about_title">About</string>
@@ -523,6 +525,11 @@
         <item>Garmin API needs a personal API key; priority decides which source wins when both exist.</item>
         <item>The source badge on each card shows whether Garmin supplied the value.</item>
         <item>Your key is never shown again; leaving the field blank keeps the saved key.</item>
+    </string-array>
+    <string-array name="help_widget_updates">
+        <item>Refresh interval sets how often the widgets re-read data in the background (system may delay under Doze).</item>
+        <item>Fixed daily times refresh at the same times every day, e.g. right after waking up; leave empty to disable.</item>
+        <item>Both can be combined; each widget still refreshes immediately when you open the app.</item>
     </string-array>
     <string-array name="help_settings_display">
         <item>Overview columns accepts one to ten columns.</item>
