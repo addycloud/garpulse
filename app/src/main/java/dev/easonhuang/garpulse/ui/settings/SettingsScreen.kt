@@ -82,6 +82,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -205,6 +207,7 @@ fun SettingsScreen(
     var showIconDialog by remember { mutableStateOf(false) }
     var showIntervalDialog by remember { mutableStateOf(false) }
     var showTimesDialog by remember { mutableStateOf(false) }
+    var showResetSourcesDialog by remember { mutableStateOf(false) }
     var timesInput by remember { mutableStateOf("") }
     var updateStatus by remember { mutableStateOf<String?>(null) }
     var updateChecking by remember { mutableStateOf(false) }
@@ -221,9 +224,17 @@ fun SettingsScreen(
     val hasSavedKey = sourceState?.hasKey == true
     // Per-region key inputs: editing one region's key must never echo into the other's field,
     // and a test on one region must not persist the other's draft.
-    var keyInputs by remember { mutableStateOf(mapOf<GarminRegion, String>()) }
-    fun keyInput(region: GarminRegion): String = keyInputs[region].orEmpty()
-    var editingRegion by remember { mutableStateOf<GarminRegion?>(null) }
+    // Saveable so a configuration change / process restart while the user is typing does not
+    // silently empty the field (a blank field made the save button do nothing at all).
+    var keyInputs by rememberSaveable(
+        stateSaver = Saver<Map<String, String>, ArrayList<String>>(
+            save = { m -> ArrayList(m.entries.flatMap { listOf(it.key, it.value) }) },
+            restore = { flat -> flat.chunked(2).filter { it.size == 2 }.associate { it[0] to it[1] } },
+        ),
+    ) { mutableStateOf(mapOf<String, String>()) }
+    fun keyInput(region: GarminRegion): String = keyInputs[region.id].orEmpty()
+    var editingRegionId by rememberSaveable { mutableStateOf<String?>(null) }
+    val editingRegion: GarminRegion? = GarminRegion.fromId(editingRegionId)
     // Which region's connection test is in flight — null when idle. Per-region so a test on
     // one region never shows a loading state on the other's button.
     var testingRegion by remember { mutableStateOf<GarminRegion?>(null) }
@@ -239,44 +250,56 @@ fun SettingsScreen(
 
     suspend fun saveKey(region: GarminRegion) {
         val input = keyInput(region)
-        if (input.isBlank()) return
+        // An empty field used to `return` silently — the button looked dead and nothing was
+        // written. Always say something and always leave a trace in the persisted op log.
+        if (input.isBlank()) {
+            app.metricSource.appendKeyOp("save ${region.id}: empty input, ignored")
+            snackbar.showSnackbar(resources.getString(R.string.garmin_api_key_empty))
+            return
+        }
         try {
-            app.metricSource.setApiKey(region, input)
-            // Read-back verification: if the write did not stick (disk, storage, store issue)
-            // tell the user immediately instead of silently showing "not configured" later.
-            val check = app.metricSource.snapshot()
-            val persisted = check.apiKey(region).isNotBlank()
-            val enabled = when (region) {
-                GarminRegion.GLOBAL -> check.globalEnabled
-                GarminRegion.CN -> check.cnEnabled
-            }
-            android.util.Log.d("GarPulseSource",
-                "save ${region.id}: persisted=$persisted enabled=$enabled keyLen=${check.apiKey(region).length}")
-            if (!persisted) {
+            app.metricSource.appendKeyOp("save ${region.id}: pressed len=${input.trim().length}")
+            // Committed length is read back inside the same write transaction: 0 means storage
+            // refused the value, which is a real failure rather than a UI problem.
+            val committed = app.metricSource.setApiKey(region, input)
+            val snapshotLen = app.metricSource.snapshot().apiKey(region).length
+            android.util.Log.d(
+                "GarPulseSource",
+                "save ${region.id}: committed=$committed snapshot=$snapshotLen",
+            )
+            app.metricSource.appendKeyOp("save ${region.id}: committed=$committed snapshot=$snapshotLen")
+            if (committed == 0 || snapshotLen == 0) {
                 snackbar.showSnackbar(resources.getString(R.string.garmin_api_key_save_verify_failed))
                 return
             }
-            keyInputs = keyInputs - region
-            editingRegion = null
+            keyInputs = keyInputs - region.id
+            editingRegionId = null
             testResult = null
             app.garminMetrics.invalidate()
             WidgetUpdateScheduler.refreshNow(context)
             snackbar.showSnackbar(resources.getString(R.string.garmin_api_key_saved))
         } catch (error: Exception) {
+            app.metricSource.appendKeyOp(
+                "save ${region.id}: FAILED ${error.javaClass.simpleName}: ${error.message}"
+            )
             showFailure(error, R.string.garmin_api_key_save_failed)
         }
     }
 
     suspend fun clearKey(region: GarminRegion) {
         try {
-            app.metricSource.setApiKey(region, "")
-            keyInputs = keyInputs - region
-            editingRegion = null
+            val committed = app.metricSource.setApiKey(region, "")
+            app.metricSource.appendKeyOp("clear ${region.id}: committed=$committed")
+            keyInputs = keyInputs - region.id
+            editingRegionId = null
             testResult = null
             app.garminMetrics.invalidate()
             WidgetUpdateScheduler.refreshNow(context)
             snackbar.showSnackbar(resources.getString(R.string.garmin_api_key_cleared))
         } catch (error: Exception) {
+            app.metricSource.appendKeyOp(
+                "clear ${region.id}: FAILED ${error.javaClass.simpleName}: ${error.message}"
+            )
             showFailure(error, R.string.garmin_api_key_save_failed)
         }
     }
@@ -294,6 +317,7 @@ fun SettingsScreen(
             return
         }
         if (app.metricSource.snapshot().apiKey(region).isBlank()) {
+            app.metricSource.appendKeyOp("test ${region.id}: no key")
             testResult = TestResult(false, resources.getString(R.string.garmin_api_no_key), region)
             return
         }
@@ -313,8 +337,8 @@ fun SettingsScreen(
             )
         }.getOrElse { error -> TestResult(false, resources.getString(R.string.garmin_api_error, error.message.orEmpty()), region) }
         testingRegion = null
-        keyInputs = keyInputs - region
-        editingRegion = null
+        keyInputs = keyInputs - region.id
+        editingRegionId = null
         testResult = result
     }
 
@@ -583,11 +607,11 @@ fun SettingsScreen(
                                     Text(stringResource(if (region == GarminRegion.GLOBAL) R.string.garmin_api_key_link else R.string.garmin_api_key_link_cn))
                                 }
                                 if (saved && editingRegion != region) {
-                                    KeyStatusRow(onChange = { editingRegion = region })
+                                    KeyStatusRow(onChange = { editingRegionId = region.id })
                                 } else {
                                     OutlinedTextField(
                                         value = keyInput(region),
-                                        onValueChange = { keyInputs = keyInputs + (region to it) },
+                                        onValueChange = { keyInputs = keyInputs + (region.id to it) },
                                         label = { Text(stringResource(R.string.garmin_api_key_label)) },
                                         placeholder = { Text(stringResource(R.string.garmin_api_key_placeholder)) },
                                         singleLine = true,
@@ -600,13 +624,14 @@ fun SettingsScreen(
                                     )
                                     Spacer(Modifier.size(8.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        // Always enabled: tapping it with an empty field now
+                                        // explains itself instead of appearing to do nothing.
                                         Button(
                                             onClick = { scope.launch { saveKey(region) } },
-                                            enabled = keyInput(region).isNotBlank(),
                                         ) { Text(stringResource(R.string.garmin_api_key_save)) }
                                         TextButton(onClick = {
-                                            keyInputs = keyInputs - region
-                                            editingRegion = null
+                                            keyInputs = keyInputs - region.id
+                                            editingRegionId = null
                                         }) { Text(stringResource(R.string.garmin_api_key_cancel)) }
                                     }
                                 }
@@ -657,6 +682,19 @@ fun SettingsScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                // Latest persisted key operation for this region — stays on screen
+                                // (unlike a snackbar) so a "save did nothing" report is readable
+                                // straight from the phone.
+                                val lastOp = current?.keyOpLog
+                                    ?.lineSequence()
+                                    ?.lastOrNull { it.contains(region.id) }
+                                if (!lastOp.isNullOrBlank()) {
+                                    Text(
+                                        stringResource(R.string.garmin_api_key_last_op, lastOp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                    )
+                                }
                             }
                             SettingsDivider()
                         }
@@ -786,6 +824,12 @@ fun SettingsScreen(
                         title = stringResource(R.string.settings_export_diagnostics),
                         subtitle = stringResource(R.string.settings_export_diagnostics_summary),
                         onClick = { diagnosticsLauncher.launch("garpulse-diagnostics.txt") },
+                    )
+                    SettingRow(
+                        icon = Icons.Rounded.SwapVert,
+                        title = stringResource(R.string.settings_reset_sources),
+                        subtitle = stringResource(R.string.settings_reset_sources_summary),
+                        onClick = { showResetSourcesDialog = true },
                     )
                     SettingRow(
                         icon = Icons.AutoMirrored.Rounded.OpenInNew,
@@ -926,6 +970,31 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showTimesDialog = false }) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
+    }
+
+    if (showResetSourcesDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetSourcesDialog = false },
+            title = { Text(stringResource(R.string.settings_reset_sources)) },
+            text = { Text(stringResource(R.string.settings_reset_sources_confirm)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showResetSourcesDialog = false
+                    scope.launch {
+                        runCatching { app.metricSource.resetAll() }
+                            .onFailure { showFailure(it, R.string.garmin_api_key_save_failed) }
+                        app.garminMetrics.invalidate()
+                        WidgetUpdateScheduler.refreshNow(context)
+                        snackbar.showSnackbar(resources.getString(R.string.settings_reset_sources_done))
+                    }
+                }) { Text(stringResource(R.string.settings_reset_sources_action)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetSourcesDialog = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
             },
         )
     }

@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.map
 
 private val Context.metricSourceDataStore by preferencesDataStore(name = "garpulse_metric_source")
 
+private const val KEY_OP_LOG_MAX = 2000
+
 /**
  * Independent data sources. Each can be enabled/disabled separately, and the user gives them
  * a priority order; a value for a metric comes from the first source in that order which
@@ -47,6 +49,8 @@ data class MetricSourceState(
     val tokenCnExpiresAt: Long = 0L,
     val lastSyncMillis: Long = 0L,
     val lastError: String = "",
+    /** Recent key save/clear operations, newest last — shown in settings and in diagnostics. */
+    val keyOpLog: String = "",
 ) {
     val globalConfigured: Boolean get() = globalEnabled && globalKey.isNotBlank()
     val cnConfigured: Boolean get() = cnEnabled && cnKey.isNotBlank()
@@ -57,6 +61,14 @@ data class MetricSourceState(
             .filter { it == GarminRegion.GLOBAL && globalConfigured || it == GarminRegion.CN && cnConfigured }
 
     val anyGarmin: Boolean get() = garminRegions.isNotEmpty()
+
+    /**
+     * A Garmin region is switched on, whether or not its key is present right now. Used to keep
+     * Garmin-mode UI up while the user is in the middle of clearing / re-entering a key — a
+     * transient empty key must not drop the app back to the Health Connect gate.
+     */
+    val garminIntent: Boolean get() = globalEnabled || cnEnabled
+
     val hcActive: Boolean get() = hcEnabled
     val hasKey: Boolean get() = globalKey.isNotBlank() || cnKey.isNotBlank()
 
@@ -95,6 +107,7 @@ class MetricSourcePreferences(private val context: Context) {
     private val tokenCnExpiryKey = longPreferencesKey("garmin_token_cn_expires_at")
     private val lastSyncKey = longPreferencesKey("garmin_last_sync")
     private val lastErrorKey = stringPreferencesKey("garmin_last_error")
+    private val keyOpKey = stringPreferencesKey("key_op_log")
     // Legacy keys from the single-source era; read once for migration.
     private val legacySourceKey = stringPreferencesKey("metric_source")
     private val legacyApiKeyKey = stringPreferencesKey("garmin_api_key")
@@ -171,6 +184,7 @@ class MetricSourcePreferences(private val context: Context) {
                 tokenCnExpiresAt = prefs[tokenCnExpiryKey] ?: 0L,
                 lastSyncMillis = prefs[lastSyncKey] ?: 0L,
                 lastError = prefs[lastErrorKey].orEmpty(),
+                keyOpLog = prefs[keyOpKey].orEmpty(),
             ).let { s ->
                 // Older installs may have both regions enabled; keep only the one with higher
                 // priority so a stale key/token is never sent to the wrong host.
@@ -232,18 +246,63 @@ class MetricSourcePreferences(private val context: Context) {
         }
     }
 
-    suspend fun setApiKey(region: GarminRegion, key: String) = edit {
-        android.util.Log.d("GarPulseSource", "setApiKey ${region.id}: writing keyLen=${key.trim().length}")
-        if (region == GarminRegion.GLOBAL) {
-            it[globalKeyKey] = key.trim()
-            it.remove(tokenGlobalKey)
-            it.remove(tokenGlobalExpiryKey)
-        } else {
-            it[cnKeyKey] = key.trim()
-            it.remove(tokenCnKey)
-            it.remove(tokenCnExpiryKey)
+    /**
+     * Writes (or with an empty string clears) a region's key and returns how many characters the
+     * committed store actually holds afterwards. Reading back inside the same transaction is the
+     * only way to prove the write stuck: a mismatched return value is a storage problem, while a
+     * correct return value means the value is really on disk.
+     */
+    suspend fun setApiKey(region: GarminRegion, key: String): Int {
+        val trimmed = key.trim()
+        val prefs = context.metricSourceDataStore.edit {
+            if (region == GarminRegion.GLOBAL) {
+                it[globalKeyKey] = trimmed
+                it.remove(tokenGlobalKey)
+                it.remove(tokenGlobalExpiryKey)
+            } else {
+                it[cnKeyKey] = trimmed
+                it.remove(tokenCnKey)
+                it.remove(tokenCnExpiryKey)
+            }
+            it.remove(lastErrorKey)
         }
-        it.remove(lastErrorKey)
+        val committed = (if (region == GarminRegion.GLOBAL) prefs[globalKeyKey] else prefs[cnKeyKey]).orEmpty()
+        android.util.Log.d(
+            "GarPulseSource",
+            "setApiKey ${region.id}: wrote=${trimmed.length} committed=${committed.length}",
+        )
+        appendKeyOp("setApiKey ${region.id} wrote=${trimmed.length} committed=${committed.length}")
+        return committed.length
+    }
+
+    /**
+     * Plain-text trail of key operations ("save pressed with empty field", "write verified", ...).
+     * Snackbars are easy to miss and vanish on recreation, so the last operations are persisted
+     * and included in the diagnostics export; that is what makes a "save does nothing" report
+     * actionable without a PC.
+     */
+    suspend fun appendKeyOp(line: String) {
+        runCatching {
+            context.metricSourceDataStore.edit { prefs ->
+                val stamp = java.time.LocalTime.now().withNano(0)
+                val prev = prefs[keyOpKey].orEmpty()
+                val next = (prev + if (prev.isEmpty()) "" else "\n") + "$stamp $line"
+                prefs[keyOpKey] = next.takeLast(KEY_OP_LOG_MAX)
+            }
+        }.onFailure { android.util.Log.e("GarPulseSource", "appendKeyOp failed", it) }
+    }
+
+    /**
+     * Escape hatch for a store that has become inconsistent (a "save never sticks" report whose
+     * only known workaround was wiping the whole app). Clears this data source's preferences and
+     * re-stamps the migration so the next read starts from clean defaults.
+     */
+    suspend fun resetAll() {
+        context.metricSourceDataStore.edit {
+            it.clear()
+            it[migratedKey] = true
+        }
+        appendKeyOp("resetAll")
     }
 
     /** Moves [id] one position up in the priority order (earlier = higher priority). */
@@ -297,10 +356,22 @@ class MetricSourcePreferences(private val context: Context) {
         sb.appendLine("applicationId=${dev.easonhuang.garpulse.BuildConfig.APPLICATION_ID}")
         sb.appendLine("migrationStamp=${prefs[migratedKey]}")
         sb.appendLine()
+        val storeDir = java.io.File(context.filesDir, "datastore")
+        sb.appendLine("--- store files (${storeDir.absolutePath}) ---")
+        runCatching {
+            storeDir.listFiles()?.sortedBy { it.name }?.forEach { f ->
+                sb.appendLine("${f.name} size=${f.length()}")
+            } ?: sb.appendLine("(none)")
+        }.onFailure { sb.appendLine("listing failed: ${it.message}") }
+        sb.appendLine()
+        sb.appendLine("--- key op log ---")
+        sb.appendLine(prefs[keyOpKey].orEmpty().ifBlank { "(empty)" })
+        sb.appendLine()
         sb.appendLine("--- raw metric_source store ---")
         prefs.asMap().entries.sortedBy { it.key.name }.forEach { (key, value) ->
             val text = value?.toString().orEmpty()
-            val sensitive = key.name.contains("key") || key.name.contains("token")
+            val sensitive = key.name != keyOpKey.name &&
+                (key.name.contains("key") || key.name.contains("token"))
             sb.appendLine(
                 if (sensitive) "${key.name} = <len=${text.length} head=${text.take(4)}>"
                 else "${key.name} = $text"

@@ -80,7 +80,9 @@ fun GarPulseRoot(
     // Sticky for the session: once the app has entered with a Garmin source, toggling a region
     // on/off must not flip this back and tear MainNav down (that reset the nav to the home tab).
     var garminMode by remember { mutableStateOf(sourceState?.anyGarmin == true) }
-    if (sourceState?.anyGarmin == true) garminMode = true
+    // Also treat an enabled-but-keyless region as Garmin mode: while the user clears and re-enters
+    // a key the app must not fall back to the Health Connect gate / onboarding.
+    if (sourceState?.anyGarmin == true || sourceState?.garminIntent == true) garminMode = true
 
     // Garmin-only users can dismiss the Health Connect gate and enter the app without it;
     // they configure their API key under 设置 → 数据来源.
