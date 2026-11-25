@@ -1381,7 +1381,10 @@ fun SettingsScreen(
                                 ) { Text(stringResource(R.string.action_download)) }
                                 TextButton(
                                     enabled = channel.latest != null,
-                                    onClick = { channel.latest?.let { copyDownloadLink(it) } },
+                                    onClick = {
+                                        apkDialogOpen = false
+                                        channel.latest?.let { copyDownloadLink(it) }
+                                    },
                                 ) { Text(stringResource(R.string.update_copy_link)) }
                             }
                         }
