@@ -241,6 +241,20 @@ fun SettingsScreen(
         if (input.isBlank()) return
         try {
             app.metricSource.setApiKey(region, input)
+            // Read-back verification: if the write did not stick (disk, storage, store issue)
+            // tell the user immediately instead of silently showing "not configured" later.
+            val check = app.metricSource.snapshot()
+            val persisted = check.apiKey(region).isNotBlank()
+            val enabled = when (region) {
+                GarminRegion.GLOBAL -> check.globalEnabled
+                GarminRegion.CN -> check.cnEnabled
+            }
+            android.util.Log.d("GarPulseSource",
+                "save ${region.id}: persisted=$persisted enabled=$enabled keyLen=${check.apiKey(region).length}")
+            if (!persisted) {
+                snackbar.showSnackbar(resources.getString(R.string.garmin_api_key_save_verify_failed))
+                return
+            }
             keyInputs = keyInputs - region
             editingRegion = null
             testResult = null

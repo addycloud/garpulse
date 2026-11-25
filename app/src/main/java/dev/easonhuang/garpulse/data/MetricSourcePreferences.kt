@@ -211,6 +211,7 @@ class MetricSourcePreferences(private val context: Context) {
     }
 
     suspend fun setApiKey(region: GarminRegion, key: String) = edit {
+        android.util.Log.d("GarPulseSource", "setApiKey ${region.id}: writing keyLen=${key.trim().length}")
         if (region == GarminRegion.GLOBAL) {
             it[globalKeyKey] = key.trim()
             it.remove(tokenGlobalKey)
