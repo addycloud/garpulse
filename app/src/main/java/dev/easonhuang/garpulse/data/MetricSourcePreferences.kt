@@ -114,6 +114,12 @@ class MetricSourcePreferences(private val context: Context) {
     private val legacyPriorityKey = booleanPreferencesKey("garmin_priority")
     private val migratedKey = booleanPreferencesKey("source_model_migrated")
 
+    // NOTE: never call `remove(key)` on this store. `MutablePreferences.remove` returns the
+    // removed value typed as T, and for a `Key<Long>` the compiler unboxes it — removing a
+    // token-expiry key that is already absent therefore throws
+    // "NullPointerException: ... Number.longValue() on a null object reference" and aborts the
+    // whole write transaction (the "key silently refuses to save" bug). `-=` returns Unit.
+
     val state: Flow<MetricSourceState> = context.metricSourceDataStore.data.map { prefs ->
         if (prefs[migratedKey] != true) migrate(prefs) else readCurrent(prefs)
     }
@@ -156,7 +162,7 @@ class MetricSourcePreferences(private val context: Context) {
                 context.metricSourceDataStore.edit {
                     writeState(it, migrated)
                     it[migratedKey] = true
-                    it.remove(legacySourceKey)
+                    it -= legacySourceKey
                 }
             }
         }.onFailure {
@@ -221,7 +227,7 @@ class MetricSourcePreferences(private val context: Context) {
         prefs[tokenGlobalExpiryKey] = s.tokenGlobalExpiresAt
         prefs[tokenCnExpiryKey] = s.tokenCnExpiresAt
         prefs[lastSyncKey] = s.lastSyncMillis
-        if (s.lastError.isBlank()) prefs.remove(lastErrorKey) else prefs[lastErrorKey] = s.lastError
+        if (s.lastError.isBlank()) prefs -= lastErrorKey else prefs[lastErrorKey] = s.lastError
     }
 
     suspend fun snapshot(): MetricSourceState = state.first()
@@ -257,14 +263,14 @@ class MetricSourcePreferences(private val context: Context) {
         val prefs = context.metricSourceDataStore.edit {
             if (region == GarminRegion.GLOBAL) {
                 it[globalKeyKey] = trimmed
-                it.remove(tokenGlobalKey)
-                it.remove(tokenGlobalExpiryKey)
+                it -= tokenGlobalKey
+                it -= tokenGlobalExpiryKey
             } else {
                 it[cnKeyKey] = trimmed
-                it.remove(tokenCnKey)
-                it.remove(tokenCnExpiryKey)
+                it -= tokenCnKey
+                it -= tokenCnExpiryKey
             }
-            it.remove(lastErrorKey)
+            it -= lastErrorKey
         }
         val committed = (if (region == GarminRegion.GLOBAL) prefs[globalKeyKey] else prefs[cnKeyKey]).orEmpty()
         android.util.Log.d(
@@ -338,7 +344,7 @@ class MetricSourcePreferences(private val context: Context) {
 
     suspend fun setStatus(syncMillis: Long, error: String) = edit {
         if (syncMillis > 0L) it[lastSyncKey] = syncMillis
-        if (error.isBlank()) it.remove(lastErrorKey) else it[lastErrorKey] = error
+        if (error.isBlank()) it -= lastErrorKey else it[lastErrorKey] = error
     }
 
     /**
