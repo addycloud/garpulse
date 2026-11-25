@@ -42,7 +42,7 @@ apksigner.bat verify aligned.apk
 ## 当前状态（2026-11-25）
 
 - 最新正式 release：**v1.2.6**（tag v1.2.6）
-- 测试用预发布：**v1.2.11-dev**（debug，15.2MB，SHA256 f77439d4…；GitHub release 457588435 / Gitee release 1365273）
+- 测试用预发布：**v1.2.11-dev**（debug，15,205,490B，SHA256 b62e2141…；GitHub release 457588435 / Gitee release 1365273）
 - v1.2.8 修复：密钥空输入不再静默（原“保存无任何反应”根因）、key 草稿 rememberSaveable、setApiKey 事务内回读长度并在 UI 校验、持久化 key_op_log（区内小字显示最近操作 + 诊断导出含 datastore 文件清单）、设置→重置数据源配置（resetAll）、garminIntent 维持 Garmin 模式
 - v1.2.8 追加：设置→关于→获取最新安装包（正式版/测试版随时可下，双镜像择优）；检查更新/立即同步/区域开关/刷新间隔/定点时间全部有 snackbar 反馈；AppUpdateChecker 的 -dev 通道 GitHub+Gitee 都支持
 - v1.2.10：检查只查版本、弹窗立即出现、按版本号取最新（Gitee 列表顺序不可信）
@@ -52,6 +52,8 @@ apksigner.bat verify aligned.apk
 - 待办：GITEE_TOKEN secret；正式 v1.2.8 待用户验收后发布（用户明确说“发布”才发）
 
 ## 高频踩坑（历史已修，勿重蹈）
+
+0) **打包产物会翻倍（15MB→29MB）**：增量打包偶尔把旧的 dex/资源重复写进 APK，zip 结构仍合法、能装，但体积多出一份 classes.dex。发布前先 `rm -f app/build/outputs/apk/debug/*.apk` 再 assemble，并用 `unzip -l` 核对条目数/体积（正常 ~1059 条目、~15MB）。
 
 1) **`MutablePreferences.remove(Key<Long>)` 会拆箱崩溃**：`remove` 返回 `T`，`Key<Long>` 在调用点被编译成 `Number.longValue()`；键不存在时返回 null → NPE ��� 整个 edit 事务回滚（表现为"密钥保存毫无反应、store 完全没变"）。本项目的 metric_source store 必须用 `it -= key`（minusAssign，返回 Unit），禁止 `it.remove(key)`。已用 dexdump 验证 `setApiKey$prefs$1` 不再含 longValue。
 
