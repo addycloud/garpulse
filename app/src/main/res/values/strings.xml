@@ -433,6 +433,10 @@
     <string name="garmin_api_key_saved">API key saved</string>
     <string name="garmin_api_key_save_failed">Operation failed: %1$s</string>
     <string name="garmin_api_key_save_verify_failed">Save did not stick (write verification failed) — try again, and report if it keeps failing</string>
+    <string name="settings_export_diagnostics">Export diagnostics</string>
+    <string name="settings_export_diagnostics_summary">Save a text file with the data-source settings (keys masked) for troubleshooting</string>
+    <string name="settings_diagnostics_saved">Diagnostics file saved</string>
+    <string name="settings_diagnostics_failed">Could not save the diagnostics file</string>
     <string name="garmin_api_key_cleared">API key cleared</string>
     <string name="garmin_api_source_switched">Data source updated</string>
     <string name="garmin_api_status_idle">Not synced yet</string>

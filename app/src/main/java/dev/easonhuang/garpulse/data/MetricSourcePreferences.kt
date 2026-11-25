@@ -102,33 +102,57 @@ class MetricSourcePreferences(private val context: Context) {
     private val migratedKey = booleanPreferencesKey("source_model_migrated")
 
     val state: Flow<MetricSourceState> = context.metricSourceDataStore.data.map { prefs ->
-        if (prefs[migratedKey] != true) {
-            // One-time migration from the old single-source model.
-            val legacyKey = prefs[legacyApiKeyKey].orEmpty()
-            val legacySource = prefs[legacySourceKey]
-            val migrated = when (legacySource) {
-                "garmin_api" -> MetricSourceState(
-                    hcEnabled = false, globalEnabled = true,
-                    globalKey = legacyKey, order = listOf(GarminRegion.GLOBAL.id),
-                )
-                "auto" -> MetricSourceState(
-                    hcEnabled = true, globalEnabled = true, globalKey = legacyKey,
-                    order = if (prefs[legacyPriorityKey] == true)
-                        listOf(GarminRegion.GLOBAL.id, SOURCE_ID_HC)
-                    else listOf(SOURCE_ID_HC, GarminRegion.GLOBAL.id),
-                )
-                else -> MetricSourceState(hcEnabled = true)
-            }
-            // Persist the migration synchronously so later readers see a stable state.
+        if (prefs[migratedKey] != true) migrate(prefs) else readCurrent(prefs)
+    }
+
+    /**
+     * One-time upgrade from the old single-source model. It must never wipe data written by the
+     * new model: old installs can carry a store where the migration stamp is missing while real
+     * keys already exist (the stamp is written by the very first read after upgrading, and a
+     * failed/aborted write used to leave the store half-populated). In that case we only stamp
+     * and keep everything. The legacy clear() is gone for the same reason — it destroyed any
+     * key that had been saved in the meantime.
+     */
+    private suspend fun migrate(prefs: androidx.datastore.preferences.core.Preferences): MetricSourceState {
+        val hasNewModelData = prefs[hcEnabledKey] != null ||
+            prefs[globalKeyKey] != null || prefs[cnKeyKey] != null ||
+            prefs[globalEnabledKey] != null || prefs[cnEnabledKey] != null
+        if (hasNewModelData) {
+            android.util.Log.w("GarPulseSource", "migration stamp missing but new-model data exists; keeping it")
+            runCatching { context.metricSourceDataStore.edit { it[migratedKey] = true } }
+            return readCurrent(prefs)
+        }
+        val legacyKey = prefs[legacyApiKeyKey].orEmpty()
+        val migrated = when (prefs[legacySourceKey]) {
+            "garmin_api" -> MetricSourceState(
+                hcEnabled = false, globalEnabled = true,
+                globalKey = legacyKey, order = listOf(GarminRegion.GLOBAL.id),
+            )
+            "auto" -> MetricSourceState(
+                hcEnabled = true, globalEnabled = true, globalKey = legacyKey,
+                order = if (prefs[legacyPriorityKey] == true)
+                    listOf(GarminRegion.GLOBAL.id, SOURCE_ID_HC)
+                else listOf(SOURCE_ID_HC, GarminRegion.GLOBAL.id),
+            )
+            else -> MetricSourceState(hcEnabled = true)
+        }
+        // Persist synchronously so later readers see a stable state. No clear(): only the
+        // migrated values are written, everything unrelated survives.
+        runCatching {
             kotlinx.coroutines.runBlocking {
                 context.metricSourceDataStore.edit {
-                    it.clear()
                     writeState(it, migrated)
                     it[migratedKey] = true
+                    it.remove(legacySourceKey)
                 }
             }
-            migrated
-        } else {
+        }.onFailure {
+            android.util.Log.e("GarPulseSource", "migration write failed", it)
+        }
+        return migrated
+    }
+
+    private fun readCurrent(prefs: androidx.datastore.preferences.core.Preferences): MetricSourceState =
             MetricSourceState(
                 hcEnabled = prefs[hcEnabledKey] ?: true,
                 globalEnabled = prefs[globalEnabledKey] ?: false,
@@ -156,8 +180,6 @@ class MetricSourcePreferences(private val context: Context) {
                     else s.copy(globalEnabled = true, cnEnabled = false)
                 } else s
             }
-        }
-    }
 
     /**
      * Ensures every known source id appears exactly once in the order. Old installs may have
@@ -258,6 +280,44 @@ class MetricSourcePreferences(private val context: Context) {
     suspend fun setStatus(syncMillis: Long, error: String) = edit {
         if (syncMillis > 0L) it[lastSyncKey] = syncMillis
         if (error.isBlank()) it.remove(lastErrorKey) else it[lastErrorKey] = error
+    }
+
+    /**
+     * Plain-text diagnostics for user reports: the raw metric-source store (secrets masked to
+     * their length and first characters) plus the resolved state. Written to a user-picked file
+     * from the settings screen so a "key does not save" report can be diagnosed without a PC.
+     */
+    suspend fun diagnosticDump(): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val prefs = context.metricSourceDataStore.data.first()
+        val sb = StringBuilder()
+        sb.appendLine("GarPulse diagnostics")
+        sb.appendLine("time=${java.time.LocalDateTime.now()}")
+        sb.appendLine("version=${dev.easonhuang.garpulse.BuildConfig.VERSION_NAME}")
+        sb.appendLine("build=${dev.easonhuang.garpulse.BuildConfig.BUILD_TYPE}")
+        sb.appendLine("applicationId=${dev.easonhuang.garpulse.BuildConfig.APPLICATION_ID}")
+        sb.appendLine("migrationStamp=${prefs[migratedKey]}")
+        sb.appendLine()
+        sb.appendLine("--- raw metric_source store ---")
+        prefs.asMap().entries.sortedBy { it.key.name }.forEach { (key, value) ->
+            val text = value?.toString().orEmpty()
+            val sensitive = key.name.contains("key") || key.name.contains("token")
+            sb.appendLine(
+                if (sensitive) "${key.name} = <len=${text.length} head=${text.take(4)}>"
+                else "${key.name} = $text"
+            )
+        }
+        sb.appendLine()
+        sb.appendLine("--- resolved state ---")
+        val s = snapshot()
+        sb.appendLine("hcEnabled=${s.hcEnabled}")
+        sb.appendLine("globalEnabled=${s.globalEnabled} globalKeyLen=${s.globalKey.length} tokenGlobalLen=${s.tokenGlobal.length} tokenGlobalExp=${s.tokenGlobalExpiresAt}")
+        sb.appendLine("cnEnabled=${s.cnEnabled} cnKeyLen=${s.cnKey.length} tokenCnLen=${s.tokenCn.length} tokenCnExp=${s.tokenCnExpiresAt}")
+        sb.appendLine("order=${s.order.joinToString(",")}")
+        sb.appendLine("anyGarmin=${s.anyGarmin} hasKey=${s.hasKey}")
+        sb.appendLine("lastSync=${s.lastSyncMillis}")
+        sb.appendLine("lastError=${s.lastError}")
+        sb.appendLine("now=${System.currentTimeMillis()}")
+        sb.toString()
     }
 
     private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {

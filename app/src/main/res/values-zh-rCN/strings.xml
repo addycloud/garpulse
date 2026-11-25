@@ -421,6 +421,10 @@
     <string name="garmin_api_key_saved">密钥已保存</string>
     <string name="garmin_api_key_save_failed">操作失败：%1$s</string>
     <string name="garmin_api_key_save_verify_failed">保存未生效（写入校验失败）——请重试，若反复出现请反馈</string>
+    <string name="settings_export_diagnostics">导出诊断日志</string>
+    <string name="settings_export_diagnostics_summary">保存一份包含数据来源设置（密钥已脱敏）的文本，便于排查问题</string>
+    <string name="settings_diagnostics_saved">诊断日志已保存</string>
+    <string name="settings_diagnostics_failed">诊断日志保存失败</string>
     <string name="garmin_api_key_cleared">密钥已清除</string>
     <string name="garmin_api_source_switched">数据来源已更新</string>
     <string name="garmin_api_status_idle">尚未同步</string>

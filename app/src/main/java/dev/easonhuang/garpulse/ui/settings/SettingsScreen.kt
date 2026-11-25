@@ -41,6 +41,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.HealthAndSafety
 import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Language
@@ -379,6 +380,25 @@ fun SettingsScreen(
     val jsonLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(ExportFormat.JSON.mime)
     ) { uri -> uri?.let { scope.launch { runExport(it, ExportFormat.JSON) } } }
+    // Support tool: dumps the data-source store (secrets masked) so a "settings do not save"
+    // report can be diagnosed from a file on the phone.
+    val diagnosticsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val text = runCatching { app.metricSource.diagnosticDump() }
+                .getOrElse { "diagnostics failed: ${it.message}" }
+            val ok = runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(text.toByteArray())
+                } != null
+            }.getOrDefault(false)
+            snackbar.showSnackbar(
+                resources.getString(if (ok) R.string.settings_diagnostics_saved else R.string.settings_diagnostics_failed)
+            )
+        }
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -760,6 +780,12 @@ fun SettingsScreen(
                         subtitle = updateStatus
                             ?: stringResource(R.string.settings_check_updates_summary),
                         onClick = { checkForUpdates() },
+                    )
+                    SettingRow(
+                        icon = Icons.Rounded.Info,
+                        title = stringResource(R.string.settings_export_diagnostics),
+                        subtitle = stringResource(R.string.settings_export_diagnostics_summary),
+                        onClick = { diagnosticsLauncher.launch("garpulse-diagnostics.txt") },
                     )
                     SettingRow(
                         icon = Icons.AutoMirrored.Rounded.OpenInNew,
