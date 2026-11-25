@@ -431,6 +431,7 @@
     <string name="garmin_api_error">Garmin error: %1$s</string>
     <string name="garmin_api_no_key">No key configured. Save a key to use Garmin or both sources.</string>
     <string name="garmin_api_key_saved">API key saved</string>
+    <string name="garmin_api_key_save_failed">Operation failed: %1$s</string>
     <string name="garmin_api_key_cleared">API key cleared</string>
     <string name="garmin_api_source_switched">Data source updated</string>
     <string name="garmin_api_status_idle">Not synced yet</string>

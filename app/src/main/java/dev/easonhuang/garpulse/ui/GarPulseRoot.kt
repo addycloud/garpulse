@@ -34,6 +34,7 @@ import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -76,7 +77,10 @@ fun GarPulseRoot(
     val sourceState by app.metricSource.state.collectAsStateWithLifecycle(initialValue = null)
     // With a configured Garmin key the app is usable without Health Connect installed — in both
     // Garmin-only and mirrored (both sources) modes.
-    val garminMode = sourceState?.anyGarmin == true
+    // Sticky for the session: once the app has entered with a Garmin source, toggling a region
+    // on/off must not flip this back and tear MainNav down (that reset the nav to the home tab).
+    var garminMode by remember { mutableStateOf(sourceState?.anyGarmin == true) }
+    if (sourceState?.anyGarmin == true) garminMode = true
 
     // Garmin-only users can dismiss the Health Connect gate and enter the app without it;
     // they configure their API key under 设置 → 数据来源.
@@ -166,8 +170,13 @@ fun GarPulseRoot(
         }
     }
 
+    // Hoisted so the nav state survives the gate/onboarding/loading branch swaps below:
+    // a new NavController always starts at the home tab, which looked like a random
+    // "jump to home" whenever the data-source config flipped.
+    val navController = rememberNavController()
     val main: @Composable () -> Unit = {
         MainNav(
+            navController = navController,
             manager, exporter, dashboardPrefs, units, language,
             onManagePermissions = ::manageAccess,
             deepLinkMetric = deepLinkMetric,
@@ -201,6 +210,7 @@ fun GarPulseRoot(
 
 @Composable
 private fun MainNav(
+    navController: NavHostController,
     manager: HealthConnectManager,
     exporter: ExportManager,
     dashboardPrefs: DashboardPreferences,
@@ -211,7 +221,6 @@ private fun MainNav(
     deepLinkDest: String? = null,
     onDeepLinkConsumed: () -> Unit = {},
 ) {
-    val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
     val topLevel = remember { Dest.entries.toList() }

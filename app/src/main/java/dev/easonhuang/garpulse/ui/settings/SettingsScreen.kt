@@ -229,34 +229,54 @@ fun SettingsScreen(
     // Result is kept on screen (not a transient snackbar) so the user can actually read it.
     var testResult by remember { mutableStateOf<TestResult?>(null) }
 
+    // Any failure in the save/clear path must surface as a message, never crash the app:
+    // an uncaught exception in this coroutine scope takes the whole process down.
+    suspend fun showFailure(error: Throwable, what: Int) {
+        android.util.Log.e("GarPulseSettings", "key operation failed", error)
+        snackbar.showSnackbar(resources.getString(what, error.message ?: error.javaClass.simpleName))
+    }
+
     suspend fun saveKey(region: GarminRegion) {
         val input = keyInput(region)
         if (input.isBlank()) return
-        app.metricSource.setApiKey(region, input)
-        keyInputs = keyInputs - region
-        editingRegion = null
-        testResult = null
-        app.garminMetrics.invalidate()
-        WidgetUpdateScheduler.refreshNow(context)
-        snackbar.showSnackbar(resources.getString(R.string.garmin_api_key_saved))
+        try {
+            app.metricSource.setApiKey(region, input)
+            keyInputs = keyInputs - region
+            editingRegion = null
+            testResult = null
+            app.garminMetrics.invalidate()
+            WidgetUpdateScheduler.refreshNow(context)
+            snackbar.showSnackbar(resources.getString(R.string.garmin_api_key_saved))
+        } catch (error: Exception) {
+            showFailure(error, R.string.garmin_api_key_save_failed)
+        }
     }
 
     suspend fun clearKey(region: GarminRegion) {
-        app.metricSource.setApiKey(region, "")
-        keyInputs = keyInputs - region
-        editingRegion = null
-        testResult = null
-        app.garminMetrics.invalidate()
-        WidgetUpdateScheduler.refreshNow(context)
-        snackbar.showSnackbar(resources.getString(R.string.garmin_api_key_cleared))
+        try {
+            app.metricSource.setApiKey(region, "")
+            keyInputs = keyInputs - region
+            editingRegion = null
+            testResult = null
+            app.garminMetrics.invalidate()
+            WidgetUpdateScheduler.refreshNow(context)
+            snackbar.showSnackbar(resources.getString(R.string.garmin_api_key_cleared))
+        } catch (error: Exception) {
+            showFailure(error, R.string.garmin_api_key_save_failed)
+        }
     }
 
     suspend fun testGarmin(region: GarminRegion) {
         // Test always uses the stored key. If the user typed a new one, persist it first.
         val input = keyInput(region)
-        if (input.isNotBlank()) {
-            app.metricSource.setApiKey(region, input)
-            app.garminMetrics.invalidate()
+        try {
+            if (input.isNotBlank()) {
+                app.metricSource.setApiKey(region, input)
+                app.garminMetrics.invalidate()
+            }
+        } catch (error: Exception) {
+            showFailure(error, R.string.garmin_api_key_save_failed)
+            return
         }
         if (app.metricSource.snapshot().apiKey(region).isBlank()) {
             testResult = TestResult(false, resources.getString(R.string.garmin_api_no_key), region)
@@ -485,17 +505,31 @@ fun SettingsScreen(
                             isLast = id == orderedIds.last(),
                             onToggle = { on ->
                                 scope.launch {
-                                    when (id) {
-                                        SOURCE_ID_HC -> app.metricSource.setHcEnabled(on)
-                                        GarminRegion.GLOBAL.id -> app.metricSource.setRegionEnabled(GarminRegion.GLOBAL, on)
-                                        else -> app.metricSource.setRegionEnabled(GarminRegion.CN, on)
+                                    try {
+                                        when (id) {
+                                            SOURCE_ID_HC -> app.metricSource.setHcEnabled(on)
+                                            GarminRegion.GLOBAL.id -> app.metricSource.setRegionEnabled(GarminRegion.GLOBAL, on)
+                                            else -> app.metricSource.setRegionEnabled(GarminRegion.CN, on)
+                                        }
+                                        app.garminMetrics.invalidate()
+                                        WidgetUpdateScheduler.refreshNow(context)
+                                    } catch (error: Exception) {
+                                        showFailure(error, R.string.garmin_api_key_save_failed)
                                     }
-                                    app.garminMetrics.invalidate()
-                                    WidgetUpdateScheduler.refreshNow(context)
                                 }
                             },
-                            onMoveUp = { scope.launch { app.metricSource.moveUp(id); WidgetUpdateScheduler.refreshNow(context) } },
-                            onMoveDown = { scope.launch { app.metricSource.moveDown(id); WidgetUpdateScheduler.refreshNow(context) } },
+                            onMoveUp = {
+                                scope.launch {
+                                    try { app.metricSource.moveUp(id); WidgetUpdateScheduler.refreshNow(context) }
+                                    catch (error: Exception) { showFailure(error, R.string.garmin_api_key_save_failed) }
+                                }
+                            },
+                            onMoveDown = {
+                                scope.launch {
+                                    try { app.metricSource.moveDown(id); WidgetUpdateScheduler.refreshNow(context) }
+                                    catch (error: Exception) { showFailure(error, R.string.garmin_api_key_save_failed) }
+                                }
+                            },
                         )
                         if (id != orderedIds.last()) SettingsDivider()
 
