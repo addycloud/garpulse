@@ -42,8 +42,9 @@ apksigner.bat verify aligned.apk
 ## 当前状态（2026-11-25）
 
 - 最新正式 release：**v1.2.6**（tag v1.2.6）
-- 测试用预发布：**v1.2.8-dev**（debug，15.0MB，SHA256 a53b80dd…；GitHub release 457550068 / Gitee release 1365010）
+- 测试用预发布：**v1.2.8-dev**（debug，28.3MB，SHA256 89328a86…；GitHub release 457550068 / Gitee release 1365010）
 - v1.2.8 修复：密钥空输入不再静默（原“保存无任何反应”根因）、key 草稿 rememberSaveable、setApiKey 事务内回读长度并在 UI 校验、持久化 key_op_log（区内小字显示最近操作 + 诊断导出含 datastore 文件清单）、设置→重置数据源配置（resetAll）、garminIntent 维持 Garmin 模式
+- v1.2.8 追加：设置→关于→获取最新安装包（正式版/测试版随时可下，双镜像择优）；检查更新/立即同步/区域开关/刷新间隔/定点时间全部有 snackbar 反馈；AppUpdateChecker 的 -dev 通道 GitHub+Gitee 都支持
 - 排障抓手：设置→关于→导出诊断日志；「最近操作：」小字；key op log 无 "save ... pressed" 行 = 点击未进 saveKey
 - 待办：GITEE_TOKEN secret；正式 v1.2.8 待用户验收后发布（用户明确说“发布”才发）
 
