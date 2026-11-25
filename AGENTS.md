@@ -39,12 +39,13 @@ apksigner.bat verify aligned.apk
 - GitHub API 用 fine-grained PAT：`C:\Users\Administrator\.workbuddy\github-pat.txt`（仅 garpulse 仓库，缺 Secrets 权限 → repo secret 无法经 API 写入）。
 - Gitee 仓库 https://gitee.com/addycloud/GarPulse，需 repo secret `GITEE_TOKEN`（待用户配置）。
 
-## 当前状态（2026-11-24）
+## 当前状态（2026-11-25）
 
-- 最新正式 release：**v1.2.6**（tag v1.2.6，含数据源开关/优先级、小组件定时更新、应用内检查更新）
-- 测试用预发布：**v1.2.6-dev**（debug 包，随修复持续替换资产）
-- 最新 commit 前后修复：测试连接 per-region loading、优先级行交换动画、pin 成功 Toast、空小组件点按打开 App、草稿兜底立即拉数据
-- 待办：GITEE_TOKEN secret；Gitee 侧 release 手动发布
+- 最新正式 release：**v1.2.6**（tag v1.2.6）
+- 测试用预发布：**v1.2.8-dev**（debug，15.0MB，SHA256 a53b80dd…；GitHub release 457550068 / Gitee release 1365010）
+- v1.2.8 修复：密钥空输入不再静默（原“保存无任何反应”根因）、key 草稿 rememberSaveable、setApiKey 事务内回读长度并在 UI 校验、持久化 key_op_log（区内小字显示最近操作 + 诊断导出含 datastore 文件清单）、设置→重置数据源配置（resetAll）、garminIntent 维持 Garmin 模式
+- 排障抓手：设置→关于→导出诊断日志；「最近操作：」小字；key op log 无 "save ... pressed" 行 = 点击未进 saveKey
+- 待办：GITEE_TOKEN secret；正式 v1.2.8 待用户验收后发布（用户明确说“发布”才发）
 
 ## 高频踩坑（历史已修，勿重蹈）
 
