@@ -15,6 +15,7 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,7 +59,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -123,6 +123,7 @@ import dev.easonhuang.garpulse.data.UnitPreferences
 import dev.easonhuang.garpulse.data.UnitSystem
 import dev.easonhuang.garpulse.ui.components.HelpButton
 import dev.easonhuang.garpulse.update.AppUpdateChecker
+import dev.easonhuang.garpulse.update.SystemDownloader
 import dev.easonhuang.garpulse.widget.WidgetUpdateScheduler
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -130,7 +131,6 @@ import kotlin.math.roundToInt
 import java.time.Instant
 import java.time.LocalTime
 import java.time.LocalDateTime
-import java.io.File
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -212,17 +212,14 @@ fun SettingsScreen(
     var timesInput by remember { mutableStateOf("") }
     var updateStatus by remember { mutableStateOf<String?>(null) }
     var updateChecking by remember { mutableStateOf(false) }
-    // The whole update flow (offer → download with progress → ready → install) lives in one
-    // state object so the dialog can never show a stale "ready" for a previous version and the
-    // user always sees what is happening right now.
-    var updateState by remember { mutableStateOf<UpdateState?>(null) }
-    var updatingTag by remember { mutableStateOf<String?>(null) }
+    // The app never downloads or installs by itself: the dialog only offers the package to the
+    // system downloader or copies its link. [updateOffer] is the build currently being offered.
+    var updateOffer by remember { mutableStateOf<AppUpdateChecker.Latest?>(null) }
     // "Get the latest APK" — lists both channels regardless of whether an update exists, so a
     // user can always fetch the debug or release package on demand.
     var apkDialogOpen by remember { mutableStateOf(false) }
     var apkChannels by remember { mutableStateOf<List<ChannelApk>?>(null) }
     var apkLoadFailed by remember { mutableStateOf(false) }
-    var apkBusyTag by remember { mutableStateOf<String?>(null) }
     var currentIcon by remember { mutableStateOf(currentLauncherIcon(context)) }
     val overviewColumns by dashboardPrefs.columns.collectAsStateWithLifecycle(
         initialValue = DashboardPreferences.DEFAULT_COLUMNS,
@@ -355,7 +352,7 @@ fun SettingsScreen(
         testResult = result
     }
 
-    /** Checks only. Downloading is a separate, explicit step so the dialog can appear at once. */
+    /** Checks the version only — nothing is downloaded until the user asks for it. */
     fun checkForUpdates() {
         if (updateChecking) return
         scope.launch {
@@ -374,9 +371,7 @@ fun SettingsScreen(
                 runCatching { app.metricSource.appendKeyOp("update check: ${latest.tagName} via ${latest.mirror}") }
                 if (AppUpdateChecker.isNewer(latest.versionName, BuildConfig.VERSION_NAME)) {
                     updateStatus = resources.getString(R.string.update_found, latest.versionName, latest.mirror)
-                    // Show the offer immediately — the old flow downloaded the whole APK first,
-                    // which is what made the dialog take minutes to appear.
-                    updateState = UpdateState.Offer(latest)
+                    updateOffer = latest
                 } else {
                     updateStatus = resources.getString(R.string.update_latest, BuildConfig.VERSION_NAME)
                     snackbar.showSnackbar(resources.getString(R.string.update_latest, BuildConfig.VERSION_NAME))
@@ -391,139 +386,50 @@ fun SettingsScreen(
         }
     }
 
-    /** Downloads one build with live progress; the dialog reflects it and stays dismissable. */
-    fun startUpdateDownload(latest: AppUpdateChecker.Latest) {
-        if (updatingTag != null) return
-        scope.launch {
-            updatingTag = latest.tagName
-            updateState = UpdateState.Downloading(latest, 0)
-            updateStatus = resources.getString(R.string.update_downloading_label, latest.tagName, 0)
-            runCatching { app.metricSource.appendKeyOp("update download start ${latest.tagName}") }
-            val dir = File(context.cacheDir, "updates").apply { mkdirs() }
-            val target = File(dir, "garpulse-${latest.tagName}.apk")
-            fun report(percent: Int) {
-                // Called from the IO thread; snapshot state writes are safe and Compose picks
-                // the new percentage up on the next frame.
-                updateState = UpdateState.Downloading(latest, percent)
-                updateStatus = resources.getString(R.string.update_downloading_label, latest.tagName, percent)
-            }
-            var apk = AppUpdateChecker.download(latest.apkUrl, target) { report(it) }
-            if (apk == null) {
-                // The mirror that answered the probe fastest is not always the one that can
-                // carry 15–30 MB; fall back to the other one before giving up.
-                val other = if (latest.mirror == "github") "gitee" else "github"
-                updateStatus = resources.getString(R.string.update_retry_other_mirror, other)
-                val alt = runCatching {
-                    AppUpdateChecker.fetchLatest(other, BuildConfig.BUILD_TYPE == "debug")
-                }.getOrNull()
-                if (alt != null) {
-                    report(0)
-                    apk = AppUpdateChecker.download(alt.apkUrl, target) { report(it) }
-                }
-            }
-            updatingTag = null
-            if (apk == null) {
-                updateState = UpdateState.Failed(latest, resources.getString(R.string.update_download_failed))
-                updateStatus = resources.getString(R.string.update_download_failed)
-                snackbar.showSnackbar(resources.getString(R.string.update_download_failed))
-                runCatching { app.metricSource.appendKeyOp("update download FAILED ${latest.tagName}") }
-            } else {
-                updateState = UpdateState.Ready(latest, apk)
-                updateStatus = resources.getString(R.string.update_downloaded, latest.tagName)
-                snackbar.showSnackbar(resources.getString(R.string.update_downloaded, latest.tagName))
-                runCatching {
-                    app.metricSource.appendKeyOp("update downloaded ${latest.tagName} bytes=${apk.length()}")
-                }
-            }
-        }
-    }
-
     /**
-     * Hands the APK to the system installer. Every step is verified first (the file exists, it is
-     * a parseable APK, unknown sources are allowed) because a botched hand-off used to surface as
-     * "tap install and the app disappears" with no explanation.
+     * Hands the package to the platform downloader. Progress, retries and the "tap to install"
+     * notification are all the system's job — the app only needs to fire the request.
      */
-    fun installApk(latest: AppUpdateChecker.Latest, apk: File) {
-        // appendKeyOp is suspending; fire-and-forget so the install path never has to await a
-        // diagnostic write before it can hand over the package.
-        fun logUpdate(line: String) {
-            scope.launch { runCatching { app.metricSource.appendKeyOp(line) } }
-        }
-        fun fail(message: String, line: String) {
-            logUpdate(line)
-            scope.launch { snackbar.showSnackbar(message) }
-        }
-
-        if (!apk.exists() || apk.length() < 1_000_000L) {
-            runCatching { apk.delete() }
-            updateState = UpdateState.Failed(latest, resources.getString(R.string.update_invalid_apk))
-            fail(resources.getString(R.string.update_invalid_apk), "install ABORT file missing/short")
-            return
-        }
-        val archive = runCatching {
-            context.packageManager.getPackageArchiveInfo(apk.absolutePath, PackageManager.GET_ACTIVITIES)
-        }.getOrNull()
-        if (archive == null) {
-            runCatching { apk.delete() }
-            updateState = UpdateState.Failed(latest, resources.getString(R.string.update_invalid_apk))
-            fail(resources.getString(R.string.update_invalid_apk), "install ABORT apk unparsable")
-            return
-        }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
-            !context.packageManager.canRequestPackageInstalls()
-        ) {
-            android.widget.Toast.makeText(
-                context,
-                context.getString(R.string.update_permission_needed),
-                android.widget.Toast.LENGTH_LONG,
-            ).show()
-            logUpdate("install ABORT unknown-sources denied")
+    fun downloadWithSystem(latest: AppUpdateChecker.Latest) {
+        updateOffer = null
+        val started = SystemDownloader.enqueue(
+            context = context,
+            url = latest.apkUrl,
+            fileName = "garpulse-${latest.tagName}.apk",
+            title = resources.getString(R.string.update_download_title, latest.tagName),
+        )
+        scope.launch {
             runCatching {
-                context.startActivity(
-                    Intent(
-                        android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                        Uri.parse("package:${context.packageName}"),
-                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                app.metricSource.appendKeyOp(
+                    "system download ${if (started) "queued" else "FAILED"} ${latest.tagName} ${latest.mirror}",
                 )
             }
-            return
-        }
-        val launched = runCatching {
-            val uri = androidx.core.content.FileProvider.getUriForFile(
-                context, "${context.packageName}.fileprovider", apk,
-            )
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/vnd.android.package-archive")
-                // The installer reads the URI from another process: grant it explicitly and
-                // carry the URI in the clip data as well (some OEM installers only honour that).
-                clipData = android.content.ClipData.newRawUri("apk", uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-        }
-        if (launched.isSuccess) {
-            logUpdate("install launched ${latest.tagName}")
-            updateState = null
-            updateStatus = resources.getString(R.string.update_install_opened)
-            return
-        }
-        val error = launched.exceptionOrNull()
-        android.util.Log.e("GarPulseSettings", "install intent failed", error)
-        logUpdate("install intent FAILED ${error?.javaClass?.simpleName}: ${error?.message}")
-        // No installer activity could be opened — let the browser take over rather than leaving
-        // the user with a dead button.
-        val browser = runCatching {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse(latest.apkUrl))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            snackbar.showSnackbar(
+                resources.getString(
+                    if (started) R.string.update_download_queued else R.string.update_download_enqueue_failed,
+                ),
             )
         }
-        if (browser.isFailure) {
-            updateState = UpdateState.Failed(latest, resources.getString(R.string.update_install_failed))
-            scope.launch { snackbar.showSnackbar(resources.getString(R.string.update_install_failed)) }
-        } else {
-            updateState = null
-            scope.launch { snackbar.showSnackbar(resources.getString(R.string.update_open_browser)) }
+        updateStatus = resources.getString(
+            if (started) R.string.update_download_queued else R.string.update_download_enqueue_failed,
+        )
+    }
+
+    /** Fallback for anyone who would rather use a browser: put the link on the clipboard. */
+    fun copyDownloadLink(latest: AppUpdateChecker.Latest) {
+        updateOffer = null
+        val copied = runCatching {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("GarPulse", latest.apkUrl))
+        }.isSuccess
+        scope.launch {
+            runCatching { app.metricSource.appendKeyOp("copy download link ${latest.tagName} copied=$copied") }
+            snackbar.showSnackbar(
+                resources.getString(
+                    if (copied) R.string.update_link_copied else R.string.update_link_copy_failed,
+                    latest.apkUrl,
+                ),
+            )
         }
     }
 
@@ -542,9 +448,8 @@ fun SettingsScreen(
 
     fun downloadChannel(channel: ChannelApk) {
         val latest = channel.latest ?: return
-        if (updatingTag != null) return
         apkDialogOpen = false
-        startUpdateDownload(latest)
+        downloadWithSystem(latest)
     }
 
     suspend fun runExport(uri: Uri, format: ExportFormat) {
@@ -1381,23 +1286,10 @@ fun SettingsScreen(
             },
         )
     }
-    updateState?.let { state ->
-        val latest = state.latest
-        val busy = state is UpdateState.Downloading
+    updateOffer?.let { latest ->
         AlertDialog(
-            onDismissRequest = { if (!busy) updateState = null },
-            title = {
-                Text(
-                    stringResource(
-                        when (state) {
-                            is UpdateState.Downloading -> R.string.update_title_downloading
-                            is UpdateState.Ready -> R.string.update_title_ready
-                            is UpdateState.Failed -> R.string.update_title_failed
-                            is UpdateState.Offer -> R.string.update_found_title
-                        }
-                    )
-                )
-            },
+            onDismissRequest = { updateOffer = null },
+            title = { Text(stringResource(R.string.update_found_title)) },
             text = {
                 Column {
                     Text(
@@ -1411,67 +1303,30 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.size(10.dp))
-                    when (state) {
-                        is UpdateState.Offer -> Text(
-                            stringResource(R.string.update_offer_body),
+                    Text(
+                        stringResource(R.string.update_system_download_body),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    SelectionContainer {
+                        Text(
+                            latest.apkUrl,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        is UpdateState.Downloading -> {
-                            LinearProgressIndicator(
-                                progress = { state.percent / 100f },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            Spacer(Modifier.size(8.dp))
-                            Text(
-                                stringResource(R.string.update_progress, state.percent),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                            if (latest.notes.isNotBlank()) {
-                                Spacer(Modifier.size(8.dp))
-                                Text(
-                                    latest.notes.take(400),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        is UpdateState.Ready -> Text(
-                            stringResource(R.string.update_ready_body_new),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        is UpdateState.Failed -> Text(
-                            state.message,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
                 }
             },
             confirmButton = {
-                when (state) {
-                    is UpdateState.Offer -> TextButton(onClick = { startUpdateDownload(latest) }) {
-                        Text(stringResource(R.string.update_download_and_install))
-                    }
-                    is UpdateState.Downloading -> TextButton(
-                        enabled = false,
-                        onClick = {},
-                    ) { Text(stringResource(R.string.update_downloading_short)) }
-                    is UpdateState.Ready -> TextButton(onClick = {
-                        updateState = null
-                        installApk(latest, state.apk)
-                    }) { Text(stringResource(R.string.update_install)) }
-                    is UpdateState.Failed -> TextButton(onClick = { startUpdateDownload(latest) }) {
-                        Text(stringResource(R.string.action_retry))
-                    }
+                TextButton(onClick = { downloadWithSystem(latest) }) {
+                    Text(stringResource(R.string.update_download_system))
                 }
             },
             dismissButton = {
-                TextButton(
-                    enabled = !busy,
-                    onClick = { updateState = null },
-                ) { Text(stringResource(R.string.update_later)) }
+                TextButton(onClick = { copyDownloadLink(latest) }) {
+                    Text(stringResource(R.string.update_copy_link))
+                }
             },
         )
     }
@@ -1521,17 +1376,13 @@ fun SettingsScreen(
                                     )
                                 }
                                 TextButton(
-                                    enabled = channel.latest != null && apkBusyTag == null,
+                                    enabled = channel.latest != null,
                                     onClick = { downloadChannel(channel) },
-                                ) {
-                                    Text(
-                                        stringResource(
-                                            if (channel.latest != null && apkBusyTag == channel.latest.tagName)
-                                                R.string.settings_get_apk_downloading
-                                            else R.string.action_download
-                                        )
-                                    )
-                                }
+                                ) { Text(stringResource(R.string.action_download)) }
+                                TextButton(
+                                    enabled = channel.latest != null,
+                                    onClick = { channel.latest?.let { copyDownloadLink(it) } },
+                                ) { Text(stringResource(R.string.update_copy_link)) }
                             }
                         }
                     }
@@ -1548,14 +1399,7 @@ fun SettingsScreen(
 
 private data class ChannelApk(val debug: Boolean, val latest: AppUpdateChecker.Latest?)
 
-/** One screen state for the whole update flow, so the dialog always matches reality. */
-private sealed interface UpdateState {
-    val latest: AppUpdateChecker.Latest
-    data class Offer(override val latest: AppUpdateChecker.Latest) : UpdateState
-    data class Downloading(override val latest: AppUpdateChecker.Latest, val percent: Int) : UpdateState
-    data class Ready(override val latest: AppUpdateChecker.Latest, val apk: File) : UpdateState
-    data class Failed(override val latest: AppUpdateChecker.Latest, val message: String) : UpdateState
-}
+
 
 @Composable
 private fun SectionLabel(

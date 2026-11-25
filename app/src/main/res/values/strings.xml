@@ -82,7 +82,15 @@
     <string name="update_install_opened">Installer opened</string>
     <string name="update_open_browser">Opening the download page in your browser</string>
     <string name="action_retry">Retry</string>
-    <string name="update_retry_other_mirror">Download failed, retrying via %1$s…</string>\n    <string name="action_close">Close</string>
+    <string name="update_retry_other_mirror">Download failed, retrying via %1$s…</string>\n    <string name="update_download_system">Download with system</string>
+    <string name="update_copy_link">Copy link</string>
+    <string name="update_system_download_body">The package is handed to the system downloader: progress shows in the notification shade, and tapping the finished notification opens the installer. You can also copy the link below and use any browser.</string>
+    <string name="update_download_title">GarPulse %1$s</string>
+    <string name="update_download_queued">Queued in the system downloader — check the notification shade</string>
+    <string name="update_download_enqueue_failed">Could not start the system downloader — copy the link and use a browser instead</string>
+    <string name="update_link_copied">Link copied://n%1$s</string>
+    <string name="update_link_copy_failed">Could not copy the link: %1$s</string>
+    <string name="action_close">Close</string>
     <string name="action_download">Download</string>
     <string name="update_downloaded">Downloaded %1$s — starting the installer</string>
     <string name="update_install_failed">Could not open the installer</string>

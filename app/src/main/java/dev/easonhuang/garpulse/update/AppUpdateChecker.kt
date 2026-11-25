@@ -140,49 +140,6 @@ object AppUpdateChecker {
         )
     }
 
-    /**
-     * Streams the APK into [target], reporting 0..100 integer progress on the way (a 28 MB
-     * download over a slow link is several minutes; without progress the UI looked frozen).
-     * Returns the file, or null on failure.
-     */
-    suspend fun download(url: String, target: File, onProgress: (Int) -> Unit = {}): File? =
-        withContext(Dispatchers.IO) {
-            try {
-                val c = URL(url).openConnection() as HttpURLConnection
-                c.connectTimeout = 15_000
-                c.readTimeout = 60_000
-                c.instanceFollowRedirects = true
-                if (c.responseCode !in 200..299) return@withContext null
-                val total = c.contentLengthLong
-                var read = 0L
-                var lastPercent = -1
-                c.inputStream.use { input ->
-                    target.outputStream().use { output ->
-                        val buffer = ByteArray(64 * 1024)
-                        while (true) {
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            output.write(buffer, 0, count)
-                            read += count
-                            if (total > 0) {
-                                val percent = ((read * 100) / total).toInt().coerceIn(0, 100)
-                                if (percent != lastPercent) {
-                                    lastPercent = percent
-                                    onProgress(percent)
-                                }
-                            }
-                        }
-                    }
-                }
-                onProgress(100)
-                if (target.length() <= 0) null else target
-            } catch (error: Exception) {
-                android.util.Log.e("GarPulseUpdate", "download failed: $url", error)
-                runCatching { target.delete() }
-                null
-            }
-        }
-
     /** True when [remote] (e.g. "1.2.6") is strictly newer than [current] (e.g. "1.2.5"). */
     fun isNewer(remote: String, current: String): Boolean {
         fun parts(v: String) = v.removePrefix("v").split('.', '-').mapNotNull { it.toIntOrNull() }
