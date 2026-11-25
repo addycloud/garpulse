@@ -42,10 +42,11 @@ apksigner.bat verify aligned.apk
 ## 当前状态（2026-11-25）
 
 - 最新正式 release：**v1.2.6**（tag v1.2.6）
-- 测试用预发布：**v1.2.10-dev**（debug，28.4MB，SHA256 eecb99ed…；GitHub release 457580583 / Gitee release 1365203）
+- 测试用预发布：**v1.2.11-dev**（debug，15.2MB，SHA256 f77439d4…；GitHub release 457588435 / Gitee release 1365273）
 - v1.2.8 修复：密钥空输入不再静默（原“保存无任何反应”根因）、key 草稿 rememberSaveable、setApiKey 事务内回读长度并在 UI 校验、持久化 key_op_log（区内小字显示最近操作 + 诊断导出含 datastore 文件清单）、设置→重置数据源配置（resetAll）、garminIntent 维持 Garmin 模式
 - v1.2.8 追加：设置→关于→获取最新安装包（正式版/测试版随时可下，双镜像择优）；检查更新/立即同步/区域开关/刷新间隔/定点时间全部有 snackbar 反馈；AppUpdateChecker 的 -dev 通道 GitHub+Gitee 都支持
-- v1.2.10 更新流程重构：检查只查版本→弹窗立刻出现（旧流程先下整包才弹窗，看着像卡死）；弹窗「下载并安装」→ 进度条 0-100%（弹窗+副标题同步）→「安装」；下载失败自动换镜像重试一次；安装前校验文件/APK 可解析/未知来源权限，URI 带 clipData 授权，失败回退浏览器并写 key op log
+- v1.2.10：检查只查版本、弹窗立即出现、按版本号取最新（Gitee 列表顺序不可信）
+- v1.2.11：**应用内不做下载/安装**。弹窗只给两个动作——用系统下载器（DownloadManager，进度在通知栏、点通知即安装）/ 复制链接（弹窗里 URL 可长按选择复制）；已移除自建下载、FileProvider、file_paths.xml、REQUEST_INSTALL_PACKAGES。别再往包里加自建安装逻辑
 - 版本选择按 versionKey 取最大，**不要依赖 /releases 返回顺序**（Gitee 列表是旧→新，曾会拿到老包）
 - 排障抓手：设置→关于→导出诊断日志；「最近操作：」小字；key op log 无 "save ... pressed" 行 = 点击未进 saveKey
 - 待办：GITEE_TOKEN secret；正式 v1.2.8 待用户验收后发布（用户明确说“发布”才发）
