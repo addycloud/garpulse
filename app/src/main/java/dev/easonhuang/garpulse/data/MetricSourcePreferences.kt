@@ -147,7 +147,15 @@ class MetricSourcePreferences(private val context: Context) {
                 tokenCnExpiresAt = prefs[tokenCnExpiryKey] ?: 0L,
                 lastSyncMillis = prefs[lastSyncKey] ?: 0L,
                 lastError = prefs[lastErrorKey].orEmpty(),
-            )
+            ).let { s ->
+                // Older installs may have both regions enabled; keep only the one with higher
+                // priority so a stale key/token is never sent to the wrong host.
+                if (s.globalEnabled && s.cnEnabled) {
+                    val cnFirst = s.order.indexOf(GarminRegion.CN.id) < s.order.indexOf(GarminRegion.GLOBAL.id)
+                    if (cnFirst) s.copy(cnEnabled = true, globalEnabled = false)
+                    else s.copy(globalEnabled = true, cnEnabled = false)
+                } else s
+            }
         }
     }
 
@@ -184,9 +192,22 @@ class MetricSourcePreferences(private val context: Context) {
 
     suspend fun setHcEnabled(enabled: Boolean) = edit { it[hcEnabledKey] = enabled }
 
+    /**
+     * Only one Garmin region may be active at a time — the two hosts serve different accounts,
+     * and mixing a key/token from one with the endpoints of the other produces 401/404.
+     * Enabling a region therefore disables the other one (keys are kept for switching back).
+     */
     suspend fun setRegionEnabled(region: GarminRegion, enabled: Boolean) = edit {
-        if (region == GarminRegion.GLOBAL) it[globalEnabledKey] = enabled
-        else it[cnEnabledKey] = enabled
+        when (region) {
+            GarminRegion.GLOBAL -> {
+                it[globalEnabledKey] = enabled
+                if (enabled) it[cnEnabledKey] = false
+            }
+            GarminRegion.CN -> {
+                it[cnEnabledKey] = enabled
+                if (enabled) it[globalEnabledKey] = false
+            }
+        }
     }
 
     suspend fun setApiKey(region: GarminRegion, key: String) = edit {

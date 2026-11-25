@@ -195,8 +195,10 @@ class GarminMetricRepository(
 ) {
     private val zone: ZoneId get() = ZoneId.systemDefault()
     private val mutex = Mutex()
-    private var cached: GarminSnapshot? = null
-    private var cachedAt = 0L
+    // Cache is strictly per region: a GLOBAL fetch must never serve CN reads (and vice versa),
+    // the two hosts have independent accounts and data.
+    private val cached = mutableMapOf<GarminRegion, GarminSnapshot>()
+    private val cachedAt = mutableMapOf<GarminRegion, Long>()
 
     private fun str(id: Int, vararg args: Any): String = context.getString(id, *args)
     private fun withUnit(value: String, metric: Metric, system: UnitSystem): String =
@@ -209,19 +211,20 @@ class GarminMetricRepository(
 
     /** Returns a cached snapshot for one minute so dashboard + widget refresh share one fetch. */
     private suspend fun snapshot(region: GarminRegion, force: Boolean = false): GarminSnapshot = mutex.withLock {
-        val age = System.currentTimeMillis() - cachedAt
-        if (!force && cached != null && age in 0..60_000L) return@withLock cached!!
+        val age = System.currentTimeMillis() - (cachedAt[region] ?: 0L)
+        val hit = cached[region]
+        if (!force && hit != null && age in 0..60_000L) return@withLock hit
         val loaded = load(region)
         if (loaded.days.isNotEmpty()) {
-            cached = loaded
-            cachedAt = System.currentTimeMillis()
+            cached[region] = loaded
+            cachedAt[region] = System.currentTimeMillis()
         }
         loaded
     }
 
     fun invalidate() {
-        cached = null
-        cachedAt = 0L
+        cached.clear()
+        cachedAt.clear()
     }
 
     private suspend fun load(region: GarminRegion): GarminSnapshot = coroutineScope {
@@ -353,7 +356,7 @@ class GarminMetricRepository(
     }
 
     suspend fun readDashboard(system: UnitSystem = UnitSystem.METRIC, region: GarminRegion = GarminRegion.GLOBAL): List<MetricSummary> {
-        if (!configured()) return emptySummaries(system)
+        if (!configured(region)) return emptySummaries(system)
         val snapshot = runCatching { snapshot(region) }.getOrNull() ?: return emptySummaries(system)
         return Metric.entries.map { metric -> summary(metric, snapshot, system) }
     }
@@ -389,7 +392,7 @@ class GarminMetricRepository(
     }
 
     suspend fun readDetail(metric: Metric, system: UnitSystem = UnitSystem.METRIC, region: GarminRegion = GarminRegion.GLOBAL): MetricDetail {
-        if (!configured()) return noDetail(metric, system)
+        if (!configured(region)) return noDetail(metric, system)
         val snapshot = runCatching { snapshot(region) }.getOrNull() ?: return noDetail(metric, system)
         val points = series(metric, snapshot, system)
         if (points.isEmpty()) return noDetail(metric, system)
