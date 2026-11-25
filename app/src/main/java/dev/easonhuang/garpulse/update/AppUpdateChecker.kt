@@ -84,21 +84,22 @@ object AppUpdateChecker {
     suspend fun fetchLatest(mirror: String, debugChannel: Boolean = false): Latest? =
         withContext(Dispatchers.IO) {
             try {
-                val single = if (mirror == "github") GITHUB_API else GITEE_API
-                val list = if (mirror == "github") GITHUB_LIST else GITEE_LIST
-                val h = headers(mirror)
-                if (!debugChannel) {
-                    // The "latest" endpoint may still return a prerelease (Gitee does not always
-                    // exclude them), so verify and fall back to a scan of the list.
-                    val latest = runCatching { JSONObject(httpGet(single, h)).toLatest(mirror) }.getOrNull()
-                    if (latest != null && !latest.tagName.endsWith("-dev")) return@withContext latest
-                    return@withContext releases(mirror, h).firstOrNull { !it.tagName.endsWith("-dev") }
-                }
-                releases(mirror, h).firstOrNull { it.tagName.endsWith("-dev") }
+                // Rank by version number instead of trusting the order the API returns: GitHub
+                // lists newest first, Gitee makes no such promise, and picking "the first -dev
+                // entry" once offered Gitee users an older build.
+                releases(mirror, headers(mirror))
+                    .filter { it.tagName.endsWith("-dev") == debugChannel }
+                    .maxByOrNull { versionKey(it.versionName) }
             } catch (_: Exception) {
                 null
             }
         }
+
+    /** Zero-padded comparison key so "1.2.10" sorts above "1.2.9". */
+    private fun versionKey(version: String): String =
+        version.removePrefix("v").split('.', '-')
+            .mapNotNull { it.toIntOrNull() }
+            .joinToString("") { it.toString().padStart(6, '0') }
 
     /**
      * Latest build of [debugChannel] from whichever mirror answers first, falling back to the
