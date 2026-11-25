@@ -2,6 +2,8 @@ package dev.easonhuang.garpulse.update
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -47,7 +49,14 @@ object AppUpdateChecker {
      * Release builds track the stable channel: the newest non-prerelease.
      */
     suspend fun probe(): Probes = withContext(Dispatchers.IO) {
-        Probes(measure(GITHUB_API), measure(GITEE_API))
+        // Both mirrors are measured at the same time: done sequentially a blocked mirror cost a
+        // full timeout before the good one was even tried, which is why "check for updates"
+        // felt like it did nothing for several seconds.
+        coroutineScope {
+            val github = async { measure(GITHUB_API) }
+            val gitee = async { measure(GITEE_API) }
+            Probes(github.await(), gitee.await())
+        }
     }
 
     private fun measure(url: String): Long = try {
@@ -91,6 +100,20 @@ object AppUpdateChecker {
             }
         }
 
+    /**
+     * Latest build of [debugChannel] from whichever mirror answers first, falling back to the
+     * other one. Returns null only when neither mirror has anything to offer.
+     */
+    suspend fun findLatest(debugChannel: Boolean): Latest? {
+        val probes = runCatching { probe() }.getOrNull() ?: return null
+        val order = listOfNotNull(probes.fastest, "github", "gitee").distinct()
+        for (mirror in order) {
+            val found = runCatching { fetchLatest(mirror, debugChannel) }.getOrNull()
+            if (found != null) return found
+        }
+        return null
+    }
+
     /** All releases from the list endpoint, newest first (prereleases included). */
     private fun releases(mirror: String, headers: Map<String, String>): List<Latest> {
         val listUrl = if (mirror == "github") GITHUB_LIST else GITEE_LIST
@@ -116,20 +139,48 @@ object AppUpdateChecker {
         )
     }
 
-    /** Streams the APK into the cache; returns the file, or null on failure. */
-    suspend fun download(url: String, target: File): File? = withContext(Dispatchers.IO) {
-        try {
-            val c = URL(url).openConnection() as HttpURLConnection
-            c.connectTimeout = 10_000
-            c.readTimeout = 30_000
-            c.instanceFollowRedirects = true
-            if (c.responseCode !in 200..299) return@withContext null
-            c.inputStream.use { input -> target.outputStream().use { output -> input.copyTo(output) } }
-            if (target.length() <= 0) null else target
-        } catch (_: Exception) {
-            null
+    /**
+     * Streams the APK into [target], reporting 0..100 integer progress on the way (a 28 MB
+     * download over a slow link is several minutes; without progress the UI looked frozen).
+     * Returns the file, or null on failure.
+     */
+    suspend fun download(url: String, target: File, onProgress: (Int) -> Unit = {}): File? =
+        withContext(Dispatchers.IO) {
+            try {
+                val c = URL(url).openConnection() as HttpURLConnection
+                c.connectTimeout = 15_000
+                c.readTimeout = 60_000
+                c.instanceFollowRedirects = true
+                if (c.responseCode !in 200..299) return@withContext null
+                val total = c.contentLengthLong
+                var read = 0L
+                var lastPercent = -1
+                c.inputStream.use { input ->
+                    target.outputStream().use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            output.write(buffer, 0, count)
+                            read += count
+                            if (total > 0) {
+                                val percent = ((read * 100) / total).toInt().coerceIn(0, 100)
+                                if (percent != lastPercent) {
+                                    lastPercent = percent
+                                    onProgress(percent)
+                                }
+                            }
+                        }
+                    }
+                }
+                onProgress(100)
+                if (target.length() <= 0) null else target
+            } catch (error: Exception) {
+                android.util.Log.e("GarPulseUpdate", "download failed: $url", error)
+                runCatching { target.delete() }
+                null
+            }
         }
-    }
 
     /** True when [remote] (e.g. "1.2.6") is strictly newer than [current] (e.g. "1.2.5"). */
     fun isNewer(remote: String, current: String): Boolean {

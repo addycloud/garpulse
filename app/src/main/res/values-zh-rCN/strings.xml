@@ -64,7 +64,23 @@
     <string name="settings_widget_times_saved">定点更新时间已保存</string>
     <string name="settings_widget_interval_saved">刷新间隔已设为 %1$d 分钟</string>
     <string name="garmin_api_last_error">上次同步错误：%1$s</string>
-    <string name="action_close">关闭</string>
+    <string name="update_title_downloading">正在下载更新</string>
+    <string name="update_title_ready">下载完成</string>
+    <string name="update_title_failed">下载失败</string>
+    <string name="update_dialog_version">版本 %1$s（构建 %2$s）</string>
+    <string name="update_dialog_mirror">下载来源：%1$s</string>
+    <string name="update_offer_body">点击「下载并安装」开始获取安装包，下载过程中可以继续使用 App。</string>
+    <string name="update_progress">正在下载… %1$d%%</string>
+    <string name="update_ready_body_new">安装包已下载完成。点击「安装」打开系统安装程序，若手机提示请允许本应用安装应用。安装过程中系统可能会关闭 GarPulse，安装完成后重新打开即可。</string>
+    <string name="update_download_and_install">下载并安装</string>
+    <string name="update_downloading_short">下载中…</string>
+    <string name="update_downloading_label">正在下载 %1$s… %2$d%%</string>
+    <string name="update_later">稍后</string>
+    <string name="update_invalid_apk">安装包无效，请重新下载。</string>
+    <string name="update_install_opened">已打开安装程序</string>
+    <string name="update_open_browser">已在浏览器中打开下载页</string>
+    <string name="action_retry">重试</string>
+    <string name="update_retry_other_mirror">下载失败，正在改用 %1$s 重试…</string>\n    <string name="action_close">关闭</string>
     <string name="action_download">下载</string>
     <string name="update_downloaded">已下载 %1$s，正在启动安装</string>
     <string name="update_install_failed">无法打开安装程序</string>

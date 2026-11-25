@@ -58,6 +58,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -211,7 +212,11 @@ fun SettingsScreen(
     var timesInput by remember { mutableStateOf("") }
     var updateStatus by remember { mutableStateOf<String?>(null) }
     var updateChecking by remember { mutableStateOf(false) }
-    var updateReady by remember { mutableStateOf<Pair<File, String>?>(null) }
+    // The whole update flow (offer → download with progress → ready → install) lives in one
+    // state object so the dialog can never show a stale "ready" for a previous version and the
+    // user always sees what is happening right now.
+    var updateState by remember { mutableStateOf<UpdateState?>(null) }
+    var updatingTag by remember { mutableStateOf<String?>(null) }
     // "Get the latest APK" — lists both channels regardless of whether an update exists, so a
     // user can always fetch the debug or release package on demand.
     var apkDialogOpen by remember { mutableStateOf(false) }
@@ -350,46 +355,33 @@ fun SettingsScreen(
         testResult = result
     }
 
+    /** Checks only. Downloading is a separate, explicit step so the dialog can appear at once. */
     fun checkForUpdates() {
         if (updateChecking) return
         scope.launch {
             updateChecking = true
             updateStatus = resources.getString(R.string.update_checking)
+            runCatching { app.metricSource.appendKeyOp("update check start") }
             try {
-                val probes = runCatching { AppUpdateChecker.probe() }.getOrNull()
-                val fastest = probes?.fastest
-                if (fastest == null) {
-                    updateStatus = resources.getString(R.string.update_no_network)
-                    snackbar.showSnackbar(resources.getString(R.string.update_no_network))
-                    return@launch
-                }
                 val debugChannel = BuildConfig.BUILD_TYPE == "debug"
-                var latest = AppUpdateChecker.fetchLatest(fastest, debugChannel)
-                if (latest == null) {
-                    latest = AppUpdateChecker.fetchLatest(if (fastest == "github") "gitee" else "github", debugChannel)
-                }
+                val latest = AppUpdateChecker.findLatest(debugChannel)
                 if (latest == null) {
                     updateStatus = resources.getString(R.string.update_no_network)
                     snackbar.showSnackbar(resources.getString(R.string.update_no_network))
+                    runCatching { app.metricSource.appendKeyOp("update check FAILED no mirror reachable") }
                     return@launch
                 }
+                runCatching { app.metricSource.appendKeyOp("update check: ${latest.tagName} via ${latest.mirror}") }
                 if (AppUpdateChecker.isNewer(latest.versionName, BuildConfig.VERSION_NAME)) {
                     updateStatus = resources.getString(R.string.update_found, latest.versionName, latest.mirror)
-                    val dir = File(context.cacheDir, "updates").apply { mkdirs() }
-                    val apk = AppUpdateChecker.download(latest.apkUrl, File(dir, "garpulse-${latest.versionName}.apk"))
-                    if (apk != null) {
-                        updateReady = apk to latest.mirror
-                        updateStatus = null
-                    } else {
-                        updateStatus = resources.getString(R.string.update_download_failed)
-                        snackbar.showSnackbar(resources.getString(R.string.update_download_failed))
-                    }
+                    // Show the offer immediately — the old flow downloaded the whole APK first,
+                    // which is what made the dialog take minutes to appear.
+                    updateState = UpdateState.Offer(latest)
                 } else {
                     updateStatus = resources.getString(R.string.update_latest, BuildConfig.VERSION_NAME)
                     snackbar.showSnackbar(resources.getString(R.string.update_latest, BuildConfig.VERSION_NAME))
                 }
-            } catch (error: Exception) {
-                // A failed check must never take the process down or leave the row spinning.
+            } catch (error: Throwable) {
                 android.util.Log.e("GarPulseSettings", "update check failed", error)
                 updateStatus = resources.getString(R.string.update_no_network)
                 snackbar.showSnackbar(resources.getString(R.string.update_no_network))
@@ -399,8 +391,84 @@ fun SettingsScreen(
         }
     }
 
-    /** Opens the system package installer, asking for "install unknown apps" once if needed. */
-    fun installApk(apk: File) {
+    /** Downloads one build with live progress; the dialog reflects it and stays dismissable. */
+    fun startUpdateDownload(latest: AppUpdateChecker.Latest) {
+        if (updatingTag != null) return
+        scope.launch {
+            updatingTag = latest.tagName
+            updateState = UpdateState.Downloading(latest, 0)
+            updateStatus = resources.getString(R.string.update_downloading_label, latest.tagName, 0)
+            runCatching { app.metricSource.appendKeyOp("update download start ${latest.tagName}") }
+            val dir = File(context.cacheDir, "updates").apply { mkdirs() }
+            val target = File(dir, "garpulse-${latest.tagName}.apk")
+            fun report(percent: Int) {
+                // Called from the IO thread; snapshot state writes are safe and Compose picks
+                // the new percentage up on the next frame.
+                updateState = UpdateState.Downloading(latest, percent)
+                updateStatus = resources.getString(R.string.update_downloading_label, latest.tagName, percent)
+            }
+            var apk = AppUpdateChecker.download(latest.apkUrl, target) { report(it) }
+            if (apk == null) {
+                // The mirror that answered the probe fastest is not always the one that can
+                // carry 15–30 MB; fall back to the other one before giving up.
+                val other = if (latest.mirror == "github") "gitee" else "github"
+                updateStatus = resources.getString(R.string.update_retry_other_mirror, other)
+                val alt = runCatching {
+                    AppUpdateChecker.fetchLatest(other, BuildConfig.BUILD_TYPE == "debug")
+                }.getOrNull()
+                if (alt != null) {
+                    report(0)
+                    apk = AppUpdateChecker.download(alt.apkUrl, target) { report(it) }
+                }
+            }
+            updatingTag = null
+            if (apk == null) {
+                updateState = UpdateState.Failed(latest, resources.getString(R.string.update_download_failed))
+                updateStatus = resources.getString(R.string.update_download_failed)
+                snackbar.showSnackbar(resources.getString(R.string.update_download_failed))
+                runCatching { app.metricSource.appendKeyOp("update download FAILED ${latest.tagName}") }
+            } else {
+                updateState = UpdateState.Ready(latest, apk)
+                updateStatus = resources.getString(R.string.update_downloaded, latest.tagName)
+                snackbar.showSnackbar(resources.getString(R.string.update_downloaded, latest.tagName))
+                runCatching {
+                    app.metricSource.appendKeyOp("update downloaded ${latest.tagName} bytes=${apk.length()}")
+                }
+            }
+        }
+    }
+
+    /**
+     * Hands the APK to the system installer. Every step is verified first (the file exists, it is
+     * a parseable APK, unknown sources are allowed) because a botched hand-off used to surface as
+     * "tap install and the app disappears" with no explanation.
+     */
+    fun installApk(latest: AppUpdateChecker.Latest, apk: File) {
+        // appendKeyOp is suspending; fire-and-forget so the install path never has to await a
+        // diagnostic write before it can hand over the package.
+        fun logUpdate(line: String) {
+            scope.launch { runCatching { app.metricSource.appendKeyOp(line) } }
+        }
+        fun fail(message: String, line: String) {
+            logUpdate(line)
+            scope.launch { snackbar.showSnackbar(message) }
+        }
+
+        if (!apk.exists() || apk.length() < 1_000_000L) {
+            runCatching { apk.delete() }
+            updateState = UpdateState.Failed(latest, resources.getString(R.string.update_invalid_apk))
+            fail(resources.getString(R.string.update_invalid_apk), "install ABORT file missing/short")
+            return
+        }
+        val archive = runCatching {
+            context.packageManager.getPackageArchiveInfo(apk.absolutePath, PackageManager.GET_ACTIVITIES)
+        }.getOrNull()
+        if (archive == null) {
+            runCatching { apk.delete() }
+            updateState = UpdateState.Failed(latest, resources.getString(R.string.update_invalid_apk))
+            fail(resources.getString(R.string.update_invalid_apk), "install ABORT apk unparsable")
+            return
+        }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
             !context.packageManager.canRequestPackageInstalls()
         ) {
@@ -409,6 +477,7 @@ fun SettingsScreen(
                 context.getString(R.string.update_permission_needed),
                 android.widget.Toast.LENGTH_LONG,
             ).show()
+            logUpdate("install ABORT unknown-sources denied")
             runCatching {
                 context.startActivity(
                     Intent(
@@ -419,18 +488,42 @@ fun SettingsScreen(
             }
             return
         }
-        runCatching {
+        val launched = runCatching {
             val uri = androidx.core.content.FileProvider.getUriForFile(
                 context, "${context.packageName}.fileprovider", apk,
             )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                // The installer reads the URI from another process: grant it explicitly and
+                // carry the URI in the clip data as well (some OEM installers only honour that).
+                clipData = android.content.ClipData.newRawUri("apk", uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        }
+        if (launched.isSuccess) {
+            logUpdate("install launched ${latest.tagName}")
+            updateState = null
+            updateStatus = resources.getString(R.string.update_install_opened)
+            return
+        }
+        val error = launched.exceptionOrNull()
+        android.util.Log.e("GarPulseSettings", "install intent failed", error)
+        logUpdate("install intent FAILED ${error?.javaClass?.simpleName}: ${error?.message}")
+        // No installer activity could be opened — let the browser take over rather than leaving
+        // the user with a dead button.
+        val browser = runCatching {
             context.startActivity(
-                Intent(Intent.ACTION_VIEW)
-                    .setDataAndType(uri, "application/vnd.android.package-archive")
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
+                Intent(Intent.ACTION_VIEW, Uri.parse(latest.apkUrl))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
-        }.onFailure {
-            android.util.Log.e("GarPulseSettings", "install failed", it)
+        }
+        if (browser.isFailure) {
+            updateState = UpdateState.Failed(latest, resources.getString(R.string.update_install_failed))
             scope.launch { snackbar.showSnackbar(resources.getString(R.string.update_install_failed)) }
+        } else {
+            updateState = null
+            scope.launch { snackbar.showSnackbar(resources.getString(R.string.update_open_browser)) }
         }
     }
 
@@ -440,42 +533,18 @@ fun SettingsScreen(
         apkChannels = null
         apkLoadFailed = false
         scope.launch {
-            val fastest = runCatching { AppUpdateChecker.probe().fastest }.getOrNull()
-            val mirrors = listOfNotNull(fastest, "github", "gitee").distinct()
-            suspend fun find(debugChannel: Boolean): AppUpdateChecker.Latest? {
-                for (m in mirrors) {
-                    val found = runCatching { AppUpdateChecker.fetchLatest(m, debugChannel) }.getOrNull()
-                    if (found != null) return found
-                }
-                return null
-            }
-            val stable = find(false)
-            val dev = find(true)
-            if (stable == null && dev == null) {
-                apkLoadFailed = true
-            }
+            val stable = runCatching { AppUpdateChecker.findLatest(false) }.getOrNull()
+            val dev = runCatching { AppUpdateChecker.findLatest(true) }.getOrNull()
+            if (stable == null && dev == null) apkLoadFailed = true
             apkChannels = listOf(ChannelApk(false, stable), ChannelApk(true, dev))
         }
     }
 
     fun downloadChannel(channel: ChannelApk) {
         val latest = channel.latest ?: return
-        if (apkBusyTag != null) return
-        scope.launch {
-            apkBusyTag = latest.tagName
-            val dir = File(context.cacheDir, "updates").apply { mkdirs() }
-            val file = runCatching {
-                AppUpdateChecker.download(latest.apkUrl, File(dir, "garpulse-${latest.tagName}.apk"))
-            }.getOrNull()
-            apkBusyTag = null
-            if (file == null) {
-                snackbar.showSnackbar(resources.getString(R.string.update_download_failed))
-            } else {
-                apkDialogOpen = false
-                snackbar.showSnackbar(resources.getString(R.string.update_downloaded, latest.tagName))
-                installApk(file)
-            }
-        }
+        if (updatingTag != null) return
+        apkDialogOpen = false
+        startUpdateDownload(latest)
     }
 
     suspend fun runExport(uri: Uri, format: ExportFormat) {
@@ -1312,19 +1381,97 @@ fun SettingsScreen(
             },
         )
     }
-    updateReady?.let { (apk, mirror) ->
+    updateState?.let { state ->
+        val latest = state.latest
+        val busy = state is UpdateState.Downloading
         AlertDialog(
-            onDismissRequest = { updateReady = null },
-            title = { Text(stringResource(R.string.update_found_title)) },
-            text = { Text(stringResource(R.string.update_ready_body, mirror)) },
+            onDismissRequest = { if (!busy) updateState = null },
+            title = {
+                Text(
+                    stringResource(
+                        when (state) {
+                            is UpdateState.Downloading -> R.string.update_title_downloading
+                            is UpdateState.Ready -> R.string.update_title_ready
+                            is UpdateState.Failed -> R.string.update_title_failed
+                            is UpdateState.Offer -> R.string.update_found_title
+                        }
+                    )
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        stringResource(R.string.update_dialog_version, latest.tagName, latest.versionName),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        stringResource(R.string.update_dialog_mirror, latest.mirror),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.size(10.dp))
+                    when (state) {
+                        is UpdateState.Offer -> Text(
+                            stringResource(R.string.update_offer_body),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        is UpdateState.Downloading -> {
+                            LinearProgressIndicator(
+                                progress = { state.percent / 100f },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Spacer(Modifier.size(8.dp))
+                            Text(
+                                stringResource(R.string.update_progress, state.percent),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            if (latest.notes.isNotBlank()) {
+                                Spacer(Modifier.size(8.dp))
+                                Text(
+                                    latest.notes.take(400),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        is UpdateState.Ready -> Text(
+                            stringResource(R.string.update_ready_body_new),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        is UpdateState.Failed -> Text(
+                            state.message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
             confirmButton = {
-                TextButton(onClick = {
-                    updateReady = null
-                    installApk(apk)
-                }) { Text(stringResource(R.string.update_install)) }
+                when (state) {
+                    is UpdateState.Offer -> TextButton(onClick = { startUpdateDownload(latest) }) {
+                        Text(stringResource(R.string.update_download_and_install))
+                    }
+                    is UpdateState.Downloading -> TextButton(
+                        enabled = false,
+                        onClick = {},
+                    ) { Text(stringResource(R.string.update_downloading_short)) }
+                    is UpdateState.Ready -> TextButton(onClick = {
+                        updateState = null
+                        installApk(latest, state.apk)
+                    }) { Text(stringResource(R.string.update_install)) }
+                    is UpdateState.Failed -> TextButton(onClick = { startUpdateDownload(latest) }) {
+                        Text(stringResource(R.string.action_retry))
+                    }
+                }
             },
             dismissButton = {
-                TextButton(onClick = { updateReady = null }) { Text(stringResource(R.string.action_cancel)) }
+                TextButton(
+                    enabled = !busy,
+                    onClick = { updateState = null },
+                ) { Text(stringResource(R.string.update_later)) }
             },
         )
     }
@@ -1400,6 +1547,15 @@ fun SettingsScreen(
 }
 
 private data class ChannelApk(val debug: Boolean, val latest: AppUpdateChecker.Latest?)
+
+/** One screen state for the whole update flow, so the dialog always matches reality. */
+private sealed interface UpdateState {
+    val latest: AppUpdateChecker.Latest
+    data class Offer(override val latest: AppUpdateChecker.Latest) : UpdateState
+    data class Downloading(override val latest: AppUpdateChecker.Latest, val percent: Int) : UpdateState
+    data class Ready(override val latest: AppUpdateChecker.Latest, val apk: File) : UpdateState
+    data class Failed(override val latest: AppUpdateChecker.Latest, val message: String) : UpdateState
+}
 
 @Composable
 private fun SectionLabel(
