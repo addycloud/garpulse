@@ -3,6 +3,7 @@ package dev.easonhuang.garpulse.update
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -16,7 +17,14 @@ import java.net.URLEncoder
  */
 object AppUpdateChecker {
 
-    data class Latest(val versionName: String, val apkUrl: String, val mirror: String, val notes: String)
+    data class Latest(
+        val versionName: String,
+        val apkUrl: String,
+        val mirror: String,
+        val notes: String,
+        /** Raw tag (e.g. "v1.2.8-dev"), used to label the channel in the UI. */
+        val tagName: String = "v$versionName",
+    )
 
     /** Probe results in ms; -1 means unreachable within the timeout. */
     data class Probes(val github: Long, val gitee: Long) {
@@ -54,55 +62,58 @@ object AppUpdateChecker {
         -1L
     }
 
-    suspend fun fetchLatest(mirror: String, debugChannel: Boolean = false): Latest? = withContext(Dispatchers.IO) {
-        try {
-            when (mirror) {
-                "github" -> {
-                    val body = if (debugChannel)
-                        httpGet(GITHUB_LIST, headers = mapOf("Accept" to "application/json", "User-Agent" to "garpulse"))
-                    else
-                        httpGet(GITHUB_API, headers = mapOf("Accept" to "application/json", "User-Agent" to "garpulse"))
-                    val json = if (debugChannel) {
-                        // List is newest-first; the dev channel is the newest prerelease tagged *-dev.
-                        val arr = JSONObject("{\"items\":${body}}").optJSONArray("items") ?: return@withContext null
-                        (0 until arr.length()).map { arr.getJSONObject(it) }
-                            .firstOrNull { it.optBoolean("prerelease", false) && it.optString("tag_name").endsWith("-dev") }
-                            ?: return@withContext null
-                    } else JSONObject(body)
-                    val asset = json.optJSONArray("assets")?.let { arr ->
-                        (0 until arr.length()).map { arr.getJSONObject(it) }
-                            .firstOrNull { it.optString("name").endsWith(".apk") }
-                    }
-                    Latest(
-                        versionName = json.optString("tag_name").removePrefix("v").removeSuffix("-dev"),
-                        apkUrl = asset?.optString("browser_download_url") ?: "",
-                        mirror = mirror,
-                        notes = json.optString("body"),
-                    )
+    private fun headers(mirror: String): Map<String, String> = when (mirror) {
+        "github" -> mapOf("Accept" to "application/json", "User-Agent" to "garpulse")
+        else -> mapOf("User-Agent" to "garpulse")
+    }
+
+    /**
+     * Latest build of the requested channel. Both mirrors can carry both channels (the dev
+     * prerelease is published on GitHub and mirrored to Gitee), so a user who cannot reach
+     * GitHub can still be offered the debug build — and vice versa.
+     */
+    suspend fun fetchLatest(mirror: String, debugChannel: Boolean = false): Latest? =
+        withContext(Dispatchers.IO) {
+            try {
+                val single = if (mirror == "github") GITHUB_API else GITEE_API
+                val list = if (mirror == "github") GITHUB_LIST else GITEE_LIST
+                val h = headers(mirror)
+                if (!debugChannel) {
+                    // The "latest" endpoint may still return a prerelease (Gitee does not always
+                    // exclude them), so verify and fall back to a scan of the list.
+                    val latest = runCatching { JSONObject(httpGet(single, h)).toLatest(mirror) }.getOrNull()
+                    if (latest != null && !latest.tagName.endsWith("-dev")) return@withContext latest
+                    return@withContext releases(mirror, h).firstOrNull { !it.tagName.endsWith("-dev") }
                 }
-                else -> {
-                    if (debugChannel) {
-                        // Dev releases are only published on GitHub; Gitee mirrors stable ones.
-                        return@withContext null
-                    }
-                    val body = httpGet(GITEE_API, headers = mapOf("User-Agent" to "garpulse"))
-                    val json = JSONObject(body)
-                    val asset = json.optJSONArray("assets")?.let { arr ->
-                        (0 until arr.length()).map { arr.getJSONObject(it) }
-                            .firstOrNull { it.optString("name").endsWith(".apk") }
-                            ?.let { it.optString("browser_download_url") }
-                    }
-                    Latest(
-                        versionName = json.optString("tag_name").removePrefix("v").removeSuffix("-dev"),
-                        apkUrl = asset ?: "",
-                        mirror = mirror,
-                        notes = json.optString("body"),
-                    )
-                }
-            }.takeIf { it.apkUrl.isNotBlank() }
-        } catch (_: Exception) {
-            null
+                releases(mirror, h).firstOrNull { it.tagName.endsWith("-dev") }
+            } catch (_: Exception) {
+                null
+            }
         }
+
+    /** All releases from the list endpoint, newest first (prereleases included). */
+    private fun releases(mirror: String, headers: Map<String, String>): List<Latest> {
+        val listUrl = if (mirror == "github") GITHUB_LIST else GITEE_LIST
+        val arr = JSONArray(httpGet(listUrl, headers))
+        return (0 until arr.length()).mapNotNull { runCatching { arr.getJSONObject(it).toLatest(mirror) }.getOrNull() }
+    }
+
+    private fun JSONObject.toLatest(mirror: String): Latest? {
+        val tag = optString("tag_name")
+        if (tag.isBlank()) return null
+        val asset = optJSONArray("assets")?.let { arr ->
+            (0 until arr.length()).map { arr.getJSONObject(it) }
+                .firstOrNull { it.optString("name").endsWith(".apk") }
+        }
+        val url = asset?.optString("browser_download_url").orEmpty()
+        if (url.isBlank()) return null
+        return Latest(
+            versionName = tag.removePrefix("v").removeSuffix("-dev"),
+            apkUrl = url,
+            mirror = mirror,
+            notes = optString("body"),
+            tagName = tag,
+        )
     }
 
     /** Streams the APK into the cache; returns the file, or null on failure. */

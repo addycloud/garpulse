@@ -212,6 +212,12 @@ fun SettingsScreen(
     var updateStatus by remember { mutableStateOf<String?>(null) }
     var updateChecking by remember { mutableStateOf(false) }
     var updateReady by remember { mutableStateOf<Pair<File, String>?>(null) }
+    // "Get the latest APK" — lists both channels regardless of whether an update exists, so a
+    // user can always fetch the debug or release package on demand.
+    var apkDialogOpen by remember { mutableStateOf(false) }
+    var apkChannels by remember { mutableStateOf<List<ChannelApk>?>(null) }
+    var apkLoadFailed by remember { mutableStateOf(false) }
+    var apkBusyTag by remember { mutableStateOf<String?>(null) }
     var currentIcon by remember { mutableStateOf(currentLauncherIcon(context)) }
     val overviewColumns by dashboardPrefs.columns.collectAsStateWithLifecycle(
         initialValue = DashboardPreferences.DEFAULT_COLUMNS,
@@ -238,6 +244,8 @@ fun SettingsScreen(
     // Which region's connection test is in flight — null when idle. Per-region so a test on
     // one region never shows a loading state on the other's button.
     var testingRegion by remember { mutableStateOf<GarminRegion?>(null) }
+    // "Sync now" also has to say something: a silent no-op looked like a dead button.
+    var syncingRegion by remember { mutableStateOf<GarminRegion?>(null) }
     // Result is kept on screen (not a transient snackbar) so the user can actually read it.
     var testResult by remember { mutableStateOf<TestResult?>(null) }
 
@@ -348,21 +356,21 @@ fun SettingsScreen(
             updateChecking = true
             updateStatus = resources.getString(R.string.update_checking)
             try {
-                val probes = AppUpdateChecker.probe()
-                val fastest = probes.fastest
+                val probes = runCatching { AppUpdateChecker.probe() }.getOrNull()
+                val fastest = probes?.fastest
                 if (fastest == null) {
                     updateStatus = resources.getString(R.string.update_no_network)
+                    snackbar.showSnackbar(resources.getString(R.string.update_no_network))
                     return@launch
                 }
                 val debugChannel = BuildConfig.BUILD_TYPE == "debug"
                 var latest = AppUpdateChecker.fetchLatest(fastest, debugChannel)
-                val via = fastest
                 if (latest == null) {
-                    val other = if (via == "github") "gitee" else "github"
-                    latest = AppUpdateChecker.fetchLatest(other, debugChannel)
+                    latest = AppUpdateChecker.fetchLatest(if (fastest == "github") "gitee" else "github", debugChannel)
                 }
                 if (latest == null) {
                     updateStatus = resources.getString(R.string.update_no_network)
+                    snackbar.showSnackbar(resources.getString(R.string.update_no_network))
                     return@launch
                 }
                 if (AppUpdateChecker.isNewer(latest.versionName, BuildConfig.VERSION_NAME)) {
@@ -374,12 +382,98 @@ fun SettingsScreen(
                         updateStatus = null
                     } else {
                         updateStatus = resources.getString(R.string.update_download_failed)
+                        snackbar.showSnackbar(resources.getString(R.string.update_download_failed))
                     }
                 } else {
                     updateStatus = resources.getString(R.string.update_latest, BuildConfig.VERSION_NAME)
+                    snackbar.showSnackbar(resources.getString(R.string.update_latest, BuildConfig.VERSION_NAME))
                 }
+            } catch (error: Exception) {
+                // A failed check must never take the process down or leave the row spinning.
+                android.util.Log.e("GarPulseSettings", "update check failed", error)
+                updateStatus = resources.getString(R.string.update_no_network)
+                snackbar.showSnackbar(resources.getString(R.string.update_no_network))
             } finally {
                 updateChecking = false
+            }
+        }
+    }
+
+    /** Opens the system package installer, asking for "install unknown apps" once if needed. */
+    fun installApk(apk: File) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+            !context.packageManager.canRequestPackageInstalls()
+        ) {
+            android.widget.Toast.makeText(
+                context,
+                context.getString(R.string.update_permission_needed),
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+            runCatching {
+                context.startActivity(
+                    Intent(
+                        android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:${context.packageName}"),
+                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }
+            return
+        }
+        runCatching {
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context, "${context.packageName}.fileprovider", apk,
+            )
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW)
+                    .setDataAndType(uri, "application/vnd.android.package-archive")
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }.onFailure {
+            android.util.Log.e("GarPulseSettings", "install failed", it)
+            scope.launch { snackbar.showSnackbar(resources.getString(R.string.update_install_failed)) }
+        }
+    }
+
+    /** Loads both channels for the "get the latest APK" dialog; they stay downloadable even if
+     *  the installed build is already the newest one. */
+    fun loadApkChannels() {
+        apkChannels = null
+        apkLoadFailed = false
+        scope.launch {
+            val fastest = runCatching { AppUpdateChecker.probe().fastest }.getOrNull()
+            val mirrors = listOfNotNull(fastest, "github", "gitee").distinct()
+            suspend fun find(debugChannel: Boolean): AppUpdateChecker.Latest? {
+                for (m in mirrors) {
+                    val found = runCatching { AppUpdateChecker.fetchLatest(m, debugChannel) }.getOrNull()
+                    if (found != null) return found
+                }
+                return null
+            }
+            val stable = find(false)
+            val dev = find(true)
+            if (stable == null && dev == null) {
+                apkLoadFailed = true
+            }
+            apkChannels = listOf(ChannelApk(false, stable), ChannelApk(true, dev))
+        }
+    }
+
+    fun downloadChannel(channel: ChannelApk) {
+        val latest = channel.latest ?: return
+        if (apkBusyTag != null) return
+        scope.launch {
+            apkBusyTag = latest.tagName
+            val dir = File(context.cacheDir, "updates").apply { mkdirs() }
+            val file = runCatching {
+                AppUpdateChecker.download(latest.apkUrl, File(dir, "garpulse-${latest.tagName}.apk"))
+            }.getOrNull()
+            apkBusyTag = null
+            if (file == null) {
+                snackbar.showSnackbar(resources.getString(R.string.update_download_failed))
+            } else {
+                apkDialogOpen = false
+                snackbar.showSnackbar(resources.getString(R.string.update_downloaded, latest.tagName))
+                installApk(file)
             }
         }
     }
@@ -571,6 +665,16 @@ fun SettingsScreen(
                                         }
                                         app.garminMetrics.invalidate()
                                         WidgetUpdateScheduler.refreshNow(context)
+                                        // Enabling a region without a key does nothing useful —
+                                        // say so instead of leaving it looking configured.
+                                        val regionRow = GarminRegion.fromId(id)
+                                        if (on && regionRow != null &&
+                                            app.metricSource.snapshot().apiKey(regionRow).isBlank()
+                                        ) {
+                                            snackbar.showSnackbar(
+                                                resources.getString(R.string.garmin_api_enabled_no_key)
+                                            )
+                                        }
                                     } catch (error: Exception) {
                                         showFailure(error, R.string.garmin_api_key_save_failed)
                                     }
@@ -646,12 +750,30 @@ fun SettingsScreen(
                                         Spacer(Modifier.size(6.dp))
                                         Text(stringResource(if (testingRegion == region) R.string.garmin_api_testing else R.string.garmin_api_test))
                                     }
-                                    TextButton(onClick = {
-                                        scope.launch {
-                                            app.garminMetrics.refresh(region)
-                                            WidgetUpdateScheduler.refreshNow(context)
-                                        }
-                                    }) { Text(stringResource(R.string.garmin_api_sync_now)) }
+                                    TextButton(
+                                        enabled = syncingRegion == null,
+                                        onClick = {
+                                            scope.launch {
+                                                syncingRegion = region
+                                                val snapshot = runCatching { app.garminMetrics.refresh(region) }.getOrNull()
+                                                WidgetUpdateScheduler.refreshNow(context)
+                                                syncingRegion = null
+                                                snackbar.showSnackbar(
+                                                    resources.getString(
+                                                        if (snapshot != null) R.string.garmin_api_sync_done
+                                                        else R.string.garmin_api_sync_failed
+                                                    )
+                                                )
+                                            }
+                                        },
+                                    ) {
+                                        Text(
+                                            stringResource(
+                                                if (syncingRegion == region) R.string.garmin_api_syncing
+                                                else R.string.garmin_api_sync_now
+                                            )
+                                        )
+                                    }
                                     if (saved) {
                                         TextButton(onClick = { scope.launch { clearKey(region) } }) {
                                             Text(stringResource(R.string.garmin_api_key_clear))
@@ -685,6 +807,16 @@ fun SettingsScreen(
                                 // Latest persisted key operation for this region — stays on screen
                                 // (unlike a snackbar) so a "save did nothing" report is readable
                                 // straight from the phone.
+                                // Surface the last sync error instead of only "last synced at":
+                                // a failing key/network used to look like a stale widget.
+                                val lastError = current?.lastError.orEmpty()
+                                if (lastError.isNotBlank()) {
+                                    Text(
+                                        stringResource(R.string.garmin_api_last_error, lastError),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
                                 val lastOp = current?.keyOpLog
                                     ?.lineSequence()
                                     ?.lastOrNull { it.contains(region.id) }
@@ -820,6 +952,15 @@ fun SettingsScreen(
                         onClick = { checkForUpdates() },
                     )
                     SettingRow(
+                        icon = Icons.Rounded.Download,
+                        title = stringResource(R.string.settings_get_apk),
+                        subtitle = stringResource(R.string.settings_get_apk_summary),
+                        onClick = {
+                            apkDialogOpen = true
+                            loadApkChannels()
+                        },
+                    )
+                    SettingRow(
                         icon = Icons.Rounded.Info,
                         title = stringResource(R.string.settings_export_diagnostics),
                         subtitle = stringResource(R.string.settings_export_diagnostics_summary),
@@ -913,6 +1054,11 @@ fun SettingsScreen(
                                         showIntervalDialog = false
                                         WidgetUpdateScheduler.setSchedule(context, minutes, WidgetUpdateScheduler.fixedTimes(context))
                                         WidgetUpdateScheduler.refreshNow(context)
+                                        scope.launch {
+                                            snackbar.showSnackbar(
+                                                resources.getString(R.string.settings_widget_interval_saved, minutes)
+                                            )
+                                        }
                                     },
                                 )
                                 .padding(vertical = 10.dp, horizontal = 4.dp),
@@ -959,13 +1105,20 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
+                    val parts = timesInput.split(',').map { it.trim() }.filter { it.isNotBlank() }
+                    val parsed = parts.mapNotNull { runCatching { LocalTime.parse(it) }.getOrNull() }
+                    if (parts.isEmpty()) {
+                        scope.launch { snackbar.showSnackbar(resources.getString(R.string.settings_widget_times_empty)) }
+                        return@TextButton
+                    }
+                    if (parsed.size != parts.size) {
+                        scope.launch { snackbar.showSnackbar(resources.getString(R.string.settings_widget_times_invalid)) }
+                        return@TextButton
+                    }
                     showTimesDialog = false
-                    val parsed = timesInput.split(',')
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                        .mapNotNull { runCatching { LocalTime.parse(it) }.getOrNull() }
                     WidgetUpdateScheduler.setSchedule(context, WidgetUpdateScheduler.intervalMinutes(context), parsed)
                     WidgetUpdateScheduler.refreshNow(context)
+                    scope.launch { snackbar.showSnackbar(resources.getString(R.string.settings_widget_times_saved)) }
                 }) { Text(stringResource(R.string.action_done)) }
             },
             dismissButton = {
@@ -1166,35 +1319,8 @@ fun SettingsScreen(
             text = { Text(stringResource(R.string.update_ready_body, mirror)) },
             confirmButton = {
                 TextButton(onClick = {
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
-                        !context.packageManager.canRequestPackageInstalls()
-                    ) {
-                        android.widget.Toast.makeText(
-                            context,
-                            context.getString(R.string.update_permission_needed),
-                            android.widget.Toast.LENGTH_LONG,
-                        ).show()
-                        runCatching {
-                            context.startActivity(
-                                Intent(
-                                    android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                                    android.net.Uri.parse("package:${context.packageName}"),
-                                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                            )
-                        }
-                        return@TextButton
-                    }
                     updateReady = null
-                    val uri = androidx.core.content.FileProvider.getUriForFile(
-                        context, "${context.packageName}.fileprovider", apk,
-                    )
-                    runCatching {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW)
-                                .setDataAndType(uri, "application/vnd.android.package-archive")
-                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
-                        )
-                    }
+                    installApk(apk)
                 }) { Text(stringResource(R.string.update_install)) }
             },
             dismissButton = {
@@ -1202,7 +1328,78 @@ fun SettingsScreen(
             },
         )
     }
+
+    if (apkDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { apkDialogOpen = false },
+            title = { Text(stringResource(R.string.settings_get_apk)) },
+            text = {
+                Column {
+                    Text(
+                        stringResource(R.string.settings_get_apk_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.size(12.dp))
+                    when {
+                        apkLoadFailed -> Text(
+                            stringResource(R.string.settings_get_apk_failed),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        apkChannels == null -> Text(
+                            stringResource(R.string.settings_get_apk_loading),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        else -> apkChannels?.forEach { channel ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        stringResource(
+                                            if (channel.debug) R.string.settings_get_apk_dev
+                                            else R.string.settings_get_apk_stable
+                                        ),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    Text(
+                                        channel.latest?.let { latest ->
+                                            if (channel.debug) "${latest.versionName}-dev" else latest.versionName
+                                        } ?: stringResource(R.string.settings_get_apk_none),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                TextButton(
+                                    enabled = channel.latest != null && apkBusyTag == null,
+                                    onClick = { downloadChannel(channel) },
+                                ) {
+                                    Text(
+                                        stringResource(
+                                            if (channel.latest != null && apkBusyTag == channel.latest.tagName)
+                                                R.string.settings_get_apk_downloading
+                                            else R.string.action_download
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { apkDialogOpen = false }) {
+                    Text(stringResource(R.string.action_close))
+                }
+            },
+        )
+    }
 }
+
+private data class ChannelApk(val debug: Boolean, val latest: AppUpdateChecker.Latest?)
 
 @Composable
 private fun SectionLabel(
